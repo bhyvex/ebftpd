@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __FS_FILE_HPP
 #define __FS_FILE_HPP
 
@@ -31,9 +46,7 @@ util::Error DeleteFile(const RealPath& path);
 util::Error DeleteFile(const acl::User& user, const VirtualPath& path, 
                        off_t* size = nullptr, time_t* modTime = nullptr);
 
-util::Error RenameFile(const RealPath& oldPath, const RealPath& newPath);
-util::Error RenameFile(const acl::User& user, const VirtualPath& oldPath,
-                       const VirtualPath& newPath);
+util::Error Rename(const RealPath& oldPath, const RealPath& newPath);
 
 FileSinkPtr CreateFile(const acl::User& user, const VirtualPath& path);
 FileSinkPtr AppendFile(const acl::User& user, const VirtualPath& path, off_t offset);

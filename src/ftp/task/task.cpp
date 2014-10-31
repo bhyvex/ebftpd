@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <sstream>
 #include "ftp/task/task.hpp"
 #include "ftp/server.hpp"
@@ -37,34 +52,37 @@ void KickUser::Execute(Server& server)
 void LoginKickUser::Execute(Server& server)
 {
   Result result;
-  for (auto& client: server.clients)
+  Client* toKick;  
+  
+  do
   {
-    if (client.User().ID() == uid && client.State() == ftp::ClientState::LoggedIn)
+    toKick = nullptr;
+    result.logins = 0;
+    result.idleTime = boost::posix_time::time_duration(0, 0, 0, 0);
+    
+    for (auto& client : server.clients)
     {
-      if (!result.kicked)
+      if (client.State() == ftp::ClientState::LoggedIn && client.User().ID() == uid)
       {
-        client.Interrupt();
-        result.kicked = true;
-        result.idleTime = client.IdleTime();
+        if (client.IdleTime() >= result.idleTime)
+        {
+          result.idleTime = client.IdleTime();
+          toKick = &client;
+        }
+        
+        ++result.logins;
       }
-      
-      ++result.logins;
     }
+  }
+  while (toKick && toKick->State() != ftp::ClientState::LoggedIn);
+  
+  if (toKick)
+  {
+    toKick->Interrupt();
+    result.kicked = true;
   }
   
   promise.set_value(result);
-}
-
-void GetOnlineUsers::Execute(Server& server)
-{
-  for (auto& client: server.clients)
-  {
-    if (client.State() != ClientState::LoggedIn) continue;
-    users.emplace_back(client.User().ID(), client.Data().State(), client.IdleTime(), 
-                       client.CurrentCommand(), client.Ident(), client.Hostname());
-  }
-  
-  promise.set_value(true);
 }
 
 void ReloadConfig::Execute(Server&)

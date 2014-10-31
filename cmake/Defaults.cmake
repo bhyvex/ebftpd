@@ -18,12 +18,17 @@ link_directories (${OpenSSL_LIBRARY_DIRS})
 include_directories (${OpenSSL_INCLUDE_DIRS})
 
 # Configure BOOST libraries
-set (Boost_USE_STATIC_LIBS OFF)
-set (Boost_USE_MULTITHREADED ON)
-set (Boost_USE_STATIC_RUNTIME OFF)
-find_package (Boost 1.49.0 REQUIRED  
-              thread regex iostreams system filesystem 
-              date_time program_options signals)
+if (NOT Boost_LIBRARY_DIRS)
+  set (Boost_USE_STATIC_LIBS OFF)
+  set (Boost_USE_MULTITHREADED ON)
+  set (Boost_USE_STATIC_RUNTIME OFF)
+  find_package (Boost 1.49.0 REQUIRED  
+                thread regex iostreams system filesystem 
+                date_time program_options signals)
+  set (Boost_LIBRARY_DIRS ${Boost_LIBRARY_DIRS} CACHE FILEPATH "Boost include directory")
+  set (Boost_LIBRARIES ${Boost_LIBRARIES} CACHE STRING "Boost library list")
+endif()
+
 link_directories (${Boost_LIBRARY_DIRS})
 include_directories (${Boost_INCLUDE_DIRS})
 
@@ -38,7 +43,6 @@ include_directories (${Pthread_INCLUDE_DIRS})
 # Some OSes seem to use external libexecinfo
 find_package (Execinfo REQUIRED)
 include_directories(${Execinfo_INCLUDE_DIRS})
-
 
 if(NOT TARGET version)
 	add_custom_target(version 

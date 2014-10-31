@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <sstream>
 #include <cassert>
 #include <iomanip>
@@ -148,22 +163,16 @@ std::string RatioString(const User& user)
   return os.str();
 }
 
-std::string FormatCredits(long long credits)
-{
-  std::ostringstream os;
-  os << std::setprecision(2) << std::fixed << (credits / 1024.0) << "MB";
-  return os.str();
-}
-
 std::string CreditString(const User& user)
 {
   std::ostringstream os;
-  os << FormatCredits(user.DefaultCredits());
+  os << util::ToString(user.DefaultCredits() / 1024.0, 2) << "MB";
   for (const auto& kv : cfg::Get().Sections())
   {
     if (kv.second.SeparateCredits())
     {
-      os << " " << kv.first << "(" << FormatCredits(user.SectionCredits(kv.first)) << ")";
+      os << " " << kv.first << "(" 
+         << util::ToString(user.SectionCredits(kv.first) / 1024.0, 2) << "MB)";
     }
   }
   return os.str();
@@ -189,12 +198,13 @@ std::string WeeklyAllotmentString(const User& user)
   if (user.DefaultWeeklyAllotment() <= 0)
     os << "Disabled";
   else
-    os << FormatCredits(user.DefaultWeeklyAllotment());
+    os << util::ToString(user.DefaultWeeklyAllotment() / 1024.0, 2) << "MB";
   for (const auto& kv : cfg::Get().Sections())
   {
     if (user.SectionWeeklyAllotment(kv.first) > 0)
     {
-      os << " " << kv.first << "(" <<  FormatCredits(user.SectionWeeklyAllotment(kv.first)) <<  ")";
+      os << " " << kv.first << "(" 
+         << util::ToString(user.SectionWeeklyAllotment(kv.first) / 1024.0, 2) <<  "MB)";
     }
   }
   return os.str();  

@@ -1,7 +1,22 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <algorithm>
 #include <boost/date_time/gregorian/gregorian.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/lexical_cast.hpp>
+#include <boost/date_time/local_time/posix_time_zone.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional.hpp>
 #include <boost/ptr_container/ptr_vector.hpp>
@@ -63,6 +78,7 @@
 #include "util/string.hpp"
 #include "util/timepair.hpp"
 #include "cmd/site/adduser.hpp"
+#include "cmd/util.hpp"
 
 namespace cmd { namespace site
 {
@@ -294,7 +310,7 @@ void DELIPCommand::Execute()
       
       indexes.emplace_back(index);
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       auto it2 = std::find(masks.begin(), masks.end(), *it);
       if (it2 == user->IPMasks().end())
@@ -402,7 +418,7 @@ void DISKFREECommand::Execute()
   }
   
   std::ostringstream os;
-  os << "Disk free: " << std::fixed << std::setprecision(2) << (bytes / 1024 / 1024.0) << "MB";
+  os << "Disk free: " << util::ToString(bytes / 1024 / 1024.0, 2) << "MB";
   control.Reply(ftp::CommandOkay, os.str());
 }
 
@@ -416,10 +432,10 @@ void DUPECommand::Execute()
     
     try
     {
-      number = boost::lexical_cast<int>(args[2]);
-      if (number <= 0) throw boost::bad_lexical_cast();
+      number = util::StrToInt(args[2]);
+      if (number <= 0) throw std::bad_cast();
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
@@ -627,8 +643,7 @@ void GIVECommand::Execute()
   
   // give user the credits
   user->IncrSectionCredits(section, credits);
-  os << "Given " << std::setprecision(2) << std::fixed << credits
-     << "KB credits to " << user->Name();
+  os << "Given " << util::ToString(credits / 1024.0, 2) << "MB credits to " << user->Name();
   if (!section.empty()) os << " on section " << section;
   os << ".";
   control.Reply(ftp::CommandOkay, os.str());
@@ -650,7 +665,10 @@ void GOODBYECommand::Execute()
   {
     std::string goodbye;
     auto e = text::GenericTemplate(client, goodbyePath, goodbye);
-    if (!e) logs::Error("Failed to display goodbye message: %1%", e.Message());
+    if (!e)
+    {
+      logs::Error("Failed to display goodbye message: %1%", e.Message());
+    }
     else
     {
       control.Reply(ftp::CommandOkay, goodbye);
@@ -686,10 +704,10 @@ void GPRANKSCommand::Execute()
   {
     try
     {
-      number = boost::lexical_cast<int>(args[4]);
-      if (number < 0) throw boost::bad_lexical_cast();
+      number = util::StrToInt(args[4]);
+      if (number < 0) throw std::bad_cast();
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
@@ -900,7 +918,7 @@ void IDLECommand::Execute()
   {
     try
     {
-      pt::seconds idleTimeout(boost::lexical_cast<long>(args[1]));
+      pt::seconds idleTimeout(util::StrToLong(args[1]));
     
       const cfg::Config& config = cfg::Get();
       
@@ -925,13 +943,11 @@ void IDLECommand::Execute()
          << " seconds.";
       control.Reply(ftp::CommandOkay, os.str());
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
   }
-  
-  return;
 }
 
 void KICKCommand::Execute()
@@ -951,49 +967,19 @@ void KICKCommand::Execute()
 
   std::future<int> future;
   std::make_shared<ftp::task::KickUser>(user->ID(), future)->Push();
-
-  future.wait();
   int kicked = future.get();
+  if (kicked == 0)
+  {
+    control.Format(ftp::CommandOkay, "User %1% is not online.", args[1]);
+  }
+  else
+  {
+    control.Format(ftp::CommandOkay, "Kicked %1% (%2% login%3%).", 
+                   args[1], kicked, kicked == 1 ? "" : "s");
+  }
   
-  std::ostringstream os;
-  os << "Kicked " << future.get() << " of " << args[1] << "'s login(s).";
-  control.Reply(ftp::CommandOkay, os.str());
   if (kicked == 0) throw cmd::NoPostScriptError();
-
   logs::Siteop(client.User().Name(), "kicked '%1%', '%2%' logins", user->Name(), kicked);
-}
-
-std::string Age(boost::posix_time::time_duration age)
-{
-  namespace pt = boost::posix_time;
-  
-  int days = age.hours() / 24;
-  age -= pt::hours(days * 24);
-  
-  int fields = 0;
-  if (days > 99) return boost::lexical_cast<std::string>(days) + "d";
-  
-  std::ostringstream os;
-  if (days > 0)
-  {
-    os << std::setw(2) << days << "d ";
-    ++fields;
-  }
-  
-  if (age.hours() > 0)
-  {
-    os << std::setw(2) << age.hours() << "h ";
-    if (++fields >= 2) return os.str();
-  }
-  
-  if (age.minutes() > 0)
-  {
-    os << std::setw(2) << age.minutes() << "m ";
-    if (++fields >= 2) return os.str();
-  }
-  
-  os << std::setw(2) << age.seconds() << "s ";
-  return util::TrimCopy(os.str());
 }
 
 void NEWCommand::Execute()
@@ -1003,10 +989,10 @@ void NEWCommand::Execute()
   {
     try
     {
-      number = boost::lexical_cast<int>(args[1]);
-      if (number <= 0) throw boost::bad_lexical_cast();
+      number = util::StrToInt(args[1]);
+      if (number <= 0) throw std::bad_cast();
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
@@ -1036,7 +1022,7 @@ void NEWCommand::Execute()
   {
     auto real = fs::MakeReal(fs::VirtualPath(result.path));
     long long kBytes;
-    auto e = fs::DirectorySize(real, cfg::Get().DirSizeDepth(), kBytes);
+    auto e = fs::DirectorySize(real, cfg::Get().DirSizeDepth(), kBytes, true);
     if (e.Errno() == ENOENT)
     {
       db::index::Delete(result.path);
@@ -1046,7 +1032,7 @@ void NEWCommand::Execute()
     auto owner = fs::GetOwner(real);
     
     body.RegisterValue("index", ++index);
-    body.RegisterValue("datetime", boost::lexical_cast<std::string>(result.dateTime));
+    body.RegisterValue("datetime", boost::posix_time::to_simple_string(result.dateTime));
     body.RegisterValue("age", Age(now - result.dateTime));
     body.RegisterValue("path", fs::Path(result.path).Basename().ToString());
     body.RegisterValue("section", result.section);
@@ -1150,10 +1136,10 @@ void RANKSCommand::Execute()
   {
     try
     {
-      number = boost::lexical_cast<int>(args[4]);
-      if (number < 0) throw boost::bad_lexical_cast();
+      number = util::StrToInt(args[4]);
+      if (number < 0) throw std::bad_cast();
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
@@ -1352,10 +1338,10 @@ void SEARCHCommand::Execute()
     
     try
     {
-      number = boost::lexical_cast<int>(args[2]);
-      if (number <= 0) throw boost::bad_lexical_cast();
+      number = util::StrToInt(args[2]);
+      if (number <= 0) throw std::bad_cast();
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     {
       throw cmd::SyntaxError();
     }
@@ -1389,7 +1375,7 @@ void SEARCHCommand::Execute()
     {
       long long kBytes;
       auto e = fs::DirectorySize(fs::MakeReal(fs::VirtualPath(result.path)),
-                                 cfg::Get().DirSizeDepth(), kBytes);
+                                 cfg::Get().DirSizeDepth(), kBytes, true);
       if (e.Errno() == ENOENT)
       {
         db::index::Delete(result.path);
@@ -1397,7 +1383,7 @@ void SEARCHCommand::Execute()
       }
 
       body.RegisterValue("index", ++index);
-      body.RegisterValue("datetime", boost::lexical_cast<std::string>(result.dateTime));
+      body.RegisterValue("datetime", boost::posix_time::to_simple_string(result.dateTime));
       body.RegisterValue("path", result.path);
       body.RegisterValue("section", result.section);
       body.RegisterSize("size", e ? kBytes : -1);
@@ -1530,6 +1516,23 @@ void SREPLYCommand::Execute()
     else
       throw cmd::SyntaxError();
   }
+}
+
+void STATCommand::Execute()
+{
+  boost::optional<text::Template> templ;
+  try
+  {
+    templ.reset(text::Factory::GetTemplate("stat"));
+  }
+  catch (const text::TemplateError& e)
+  {
+    control.Reply(ftp::ActionNotOkay, e.Message());
+    return;
+  }
+  
+  text::RegisterGlobals(client, templ->Body());  
+  control.Reply(ftp::CommandOkay, templ->Body().Compile(true));
 }
 
 void STATSCommand::Execute()
@@ -1710,8 +1713,7 @@ void TAKECommand::Execute()
   user->DecrSectionCreditsForce(section, credits);
   
   std::ostringstream os;
-  os << "Taken " << std::fixed << std::setprecision(2) << credits
-     << "KB credits from " << user->Name();
+  os << "Taken " << util::ToString(credits / 1024.0, 2) << "MB credits from " << user->Name();
   if (!section.empty()) os << " on section " << section;
   os << ".";
   control.Reply(ftp::CommandOkay, os.str());
@@ -1726,7 +1728,8 @@ namespace pt = boost::posix_time;
 std::string FormatDuration(const boost::posix_time::time_duration& duration)
 {
   std::ostringstream os;
-  if (duration.hours()) os << duration.hours() << "h ";
+  if (duration.hours() / 60 > 0) os << static_cast<unsigned>(duration.hours() / 24) << "d ";
+  if (duration.hours()) os << duration.hours() % 24 << "h ";
   if (duration.minutes()) os << duration.minutes() << "m ";
   if (duration.seconds()) os << duration.seconds() << "s";
   return os.str();
@@ -1734,15 +1737,24 @@ std::string FormatDuration(const boost::posix_time::time_duration& duration)
 
 void TIMECommand::Execute()
 {
-  pt::ptime now = pt::second_clock::local_time();
+  namespace gd = boost::gregorian;
+  namespace lt = boost::local_time;
+  
+  auto now = pt::second_clock::local_time();
+  time_t t = (now - pt::ptime(gd::date(1970, 1, 1))).total_seconds();
+  struct tm tm;
+  std::string timezone = lt::posix_time_zone(localtime_r(&t, &tm)->tm_zone).to_posix_string();
   
   std::ostringstream os;
-  os << "Current time : " << now << "\n"
-     << "Logged in at : " << client.LoggedInAt() << "\n"
-     << "Time online  : " << FormatDuration(now - client.LoggedInAt());
+  os << "Current time : " << now << " " << timezone << "\n"
+     << "Logged in at : " << client.LoggedInAt() << " " << timezone << "\n"
+     << "Time online  : " << FormatDuration(now - client.LoggedInAt()) << "\n"
+     << "End of day   : " << FormatDuration(pt::ptime(now.date() + gd::date_duration(1)) - now) << "\n"
+     << "End of week  : " << FormatDuration(pt::ptime(now.date() + gd::date_duration(7 - now.date().day_of_week())) - now) << "\n"   
+     << "End of month : " << FormatDuration(pt::ptime(now.date().end_of_month() + gd::date_duration(1)) - now) << "\n"
+     << "End of year  : " << FormatDuration(pt::ptime(gd::date(now.date().year() + 1, 1, 1)) - now);
   
   control.Reply(ftp::CommandOkay, os.str());
-  return;
 }
 
 void TRAFFICCommand::Execute()
@@ -1841,7 +1853,7 @@ void UPDATECommand::Execute()
       {
         if (util::path::Status(fs::MakeReal(entryPath).ToString()).IsDirectory())
         {
-          auto section = cfg::Get().SectionMatch(entryPath.ToString());
+          auto section = cfg::Get().SectionMatch(entryPath.ToString(), true);
           db::index::Add(entryPath.ToString(), section ? section->Name() : "");
           ++addedCount;
         }
@@ -2092,7 +2104,6 @@ void UTIMECommand::Execute()
 void VERSCommand::Execute()
 {
   control.Reply(ftp::CommandOkay, "This server is running: " + programFullname);
-  return;
 }
 
 void WELCOMECommand::Execute()
@@ -2102,7 +2113,10 @@ void WELCOMECommand::Execute()
   {
     std::string welcome;
     auto e = text::GenericTemplate(client, welcomePath, welcome);
-    if (!e) logs::Error("Failed to display welcome message: %1%", e.Message());
+    if (!e)
+    {
+      logs::Error("Failed to display welcome message: %1%", e.Message());
+    }
     else
     {
       control.Reply(ftp::CommandOkay, welcome);
@@ -2148,9 +2162,9 @@ void XDUPECommand::Execute()
   int mode;
   try
   {
-    mode = boost::lexical_cast<int>(args[1]);
+    mode = util::StrToInt(args[1]);
   }
-  catch (const boost::bad_lexical_cast&)
+  catch (const std::bad_cast&)
   {
     throw cmd::SyntaxError();
   }
@@ -2164,7 +2178,6 @@ void XDUPECommand::Execute()
   std::ostringstream os;
   os << "Activated extended dupe mode " << mode << ".";
   control.Reply(ftp::CommandOkay, os.str());
-  return;
 }
 
 } /* site namespace */

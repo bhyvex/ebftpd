@@ -1,10 +1,24 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __UTIL_STRING_HPP
 #define __UTIL_STRING_HPP
 
 #include <algorithm>
 #include <string>
 #include <vector>
-#include <boost/lexical_cast.hpp>
 #include "util/error.hpp"
 
 namespace util
@@ -93,6 +107,27 @@ std::string ToUpperCopy(const std::string& s);
 
 bool StartsWith(const std::string& s, const std::string& test);
 bool EndsWith(const std::string& s, const std::string& test);
+
+double StrToDouble(const std::string& s);
+float StrToFloat(const std::string& s);
+int StrToInt(const std::string& s);
+long StrToLong(const std::string& s);
+long double StrToLDouble(const std::string& s);
+long long StrToLLong(const std::string& s);
+unsigned long StrToULong(const std::string& s);
+unsigned long long StrToULLong(const std::string& s);
+
+std::string ToString(long double v, int precision = -1, bool fixed = true);
+inline std::string ToString(double v, int precision = -1, bool fixed = true)
+{
+  return ToString(static_cast<long double>(v), precision, fixed);
+}
+
+inline std::string ToString(float v, int precision, bool fixed = true)
+{
+  return ToString(static_cast<float>(v), precision, fixed);
+}
+
 
 } /* util namespace */
 

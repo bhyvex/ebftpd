@@ -1,18 +1,33 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <string>
 #include <vector>
 #include <iostream>
-#include <mongo/client/dbclient.h>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/regex.hpp>
-#include "cfg/config.hpp"
+#include "cfg/get.hpp"
 #include "cfg/error.hpp"
 #include "fs/owner.hpp"
 #include "util/path/status.hpp"
 #include "util/path/diriterator.hpp"
 #include "version.hpp"
 #include "db/error.hpp"
+#include "db/connection.hpp"
 
 std::shared_ptr<cfg::Config> config;
 
@@ -97,6 +112,8 @@ bool ParseOptions(int argc, char** argv, bool& recursive, std::string& configPat
 template <typename Iterator>
 void SetOwner(Iterator begin, Iterator end, const fs::Owner& owner, bool recursive)
 {
+  using namespace util::path;
+
   for (auto it = begin; it != end; ++it)
   {
     const std::string& path = *it;
@@ -108,10 +125,11 @@ void SetOwner(Iterator begin, Iterator end, const fs::Owner& owner, bool recursi
     {
       try
       {
-        auto status = util::path::Status(path);
+        auto status = Status(path);
         if (status.IsDirectory() && !status.IsSymLink())
         {
-          SetOwner(util::path::DirIterator(path, false), util::path::DirIterator(), owner, recursive);
+          SetOwner(DirIterator(path, DirIterator::AbsolutePath), 
+                   DirIterator(), owner, recursive);
         }
       }
       catch (const util::SystemError& e)
@@ -122,21 +140,21 @@ void SetOwner(Iterator begin, Iterator end, const fs::Owner& owner, bool recursi
   }
 }
 
-acl::UserID LookupUID(mongo::DBClientConnection& conn, const std::string& user)
+acl::UserID LookupUID(db::SafeConnection& conn, const std::string& user)
 {
   auto query = QUERY("name" << user);
-  auto cursor = conn.query(config->Database().Name() + ".users", query, 1);
-  db::LastErrorToException(conn);
+  auto cursor = conn.BaseConn().query(config->Database().Name() + ".users", query, 1);
+  db::LastErrorToException(conn.BaseConn());
   if (!cursor.get()) throw mongo::DBException("Connection failure", 0);
   if (!cursor->more()) throw util::RuntimeError("User doesn't exist: " + user);
   return cursor->next()["uid"].Int();
 }
 
-acl::GroupID LookupGID(mongo::DBClientConnection& conn, const std::string& group)
+acl::GroupID LookupGID(db::SafeConnection& conn, const std::string& group)
 {
   auto query = QUERY("name" << group);
-  auto cursor = conn.query(config->Database().Name() + ".groups", query, 1);
-  db::LastErrorToException(conn);
+  auto cursor = conn.BaseConn().query(config->Database().Name() + ".groups", query, 1);
+  db::LastErrorToException(conn.BaseConn());
   if (!cursor.get()) throw mongo::DBException("Connection failure", 0);
   if (!cursor->more()) throw util::RuntimeError("Group doesn't exist: " + group);
   return cursor->next()["gid"].Int();
@@ -147,15 +165,7 @@ util::Error LookupOwner(const std::string& user, const std::string& group, fs::O
   auto dbConfig = config->Database();  
   try
   {
-    mongo::DBClientConnection conn;
-    conn.connect(dbConfig.Host());
-    if (!dbConfig.Login().empty())
-    {
-      std::string errmsg;
-      if (!conn.auth(dbConfig.Name(), dbConfig.Login(), dbConfig.Password(), errmsg))
-        throw mongo::DBException("Authentication failed", 0);
-    }
-    
+    db::SafeConnection conn;
     owner = fs::Owner(user.empty() ? -1 : LookupUID(conn, user),
                       group.empty() ? -1 : LookupGID(conn, group));
   }
@@ -184,6 +194,7 @@ int main(int argc, char** argv)
   try
   {
     config = cfg::Config::Load(configPath, true);
+    cfg::UpdateShared(config);
   }
   catch (const cfg::ConfigError& e)
   {
@@ -196,8 +207,9 @@ int main(int argc, char** argv)
   if (!e)
   {
     std::cerr << "Unable to look up owner in database: " << e.Message() << std::endl;
-    return 1;
+    _exit(1);
   }
 
   SetOwner(paths.begin(), paths.end(), owner, recursive);
+  _exit(0); // used to work around a mongodb driver bug
 }

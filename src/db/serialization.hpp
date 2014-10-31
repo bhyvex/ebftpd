@@ -1,8 +1,24 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __DB_SERIALIZATION_HPP
 #define __DB_SERIALIZATION_HPP
 
 #include <cstdint>
 #include <set>
+#include <ctime>
 #include <mongo/client/dbclient.h>
 #include "util/typetraits.hpp"
 #include "util/verify.hpp"
@@ -123,6 +139,9 @@ template <> inline int32_t Unserialize<int32_t>(const mongo::BSONObj& obj)
 mongo::Date_t ToDateT(const boost::posix_time::ptime& t);
 inline mongo::Date_t ToDateT(const boost::gregorian::date& d)
 { return ToDateT(boost::posix_time::ptime(d)); }
+
+inline mongo::Date_t ToDateT(time_t t)
+{ return mongo::Date_t(t * 1000); }
 
 boost::posix_time::ptime ToPosixTime(const mongo::Date_t& dt);
 inline boost::gregorian::date ToGregDate(const mongo::Date_t& dt)

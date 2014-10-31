@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <sstream>
 #include <unordered_map>
 #include "cmd/site/group.hpp"
@@ -25,17 +40,17 @@ void GROUPCommand::PopulateHeadOrFoot(const acl::Group& group, text::TemplateSec
   tmpl.RegisterValue("group", group.Name());
   tmpl.RegisterValue("descr", group.Description());
   tmpl.RegisterValue("slots", group.Slots() != -1 ? 
-                              boost::lexical_cast<std::string>(group.Slots()) : 
+                              std::to_string(group.Slots()) : 
                               "Unlimited");
   tmpl.RegisterValue("leechslots", group.LeechSlots() != -1 ? 
-                                   boost::lexical_cast<std::string>(group.LeechSlots()) : 
+                                   std::to_string(group.LeechSlots()) : 
                                    "Unlimited");
   tmpl.RegisterValue("allotslots", group.AllotmentSlots() != -1 ? 
-                                   boost::lexical_cast<std::string>(group.AllotmentSlots()) : 
+                                   std::to_string(group.AllotmentSlots()) : 
                                    "Unlimited");
   tmpl.RegisterValue("maxallotsize", group.MaxAllotmentSize());
   tmpl.RegisterValue("maxlogins", group.MaxLogins() != -1 ?
-                                   boost::lexical_cast<std::string>(group.MaxLogins()) : 
+                                   std::to_string(group.MaxLogins()) : 
                                    "Unlimited");
 }
 
@@ -78,24 +93,28 @@ void GROUPCommand::Execute()
   std::ostringstream os;
   os << head.Compile();
 
-  std::unordered_map<acl::UserID, ::stats::Stat> dnStats;// = db::stats::GetAllDown(users);
-  std::unordered_map<acl::UserID, ::stats::Stat> upStats;// = db::stats::GetAllUp(users);
-
-  for (auto& user: users)
+  for (auto& user : users)
   {
     std::string flag = " ";
     if (user.HasFlag(acl::Flag::Siteop)) flag = "*";
     else if (user.HasFlag(acl::Flag::Gadmin)) flag = "+";
     else if (user.HasFlag(acl::Flag::Useredit)) flag = "%";
 
+    auto upStats = db::stats::CalculateSingleUser(user.ID(), "", 
+                              ::stats::Timeframe::Alltime, ::stats::Direction::Upload);
+    auto dnStats = db::stats::CalculateSingleUser(user.ID(), "", 
+                              ::stats::Timeframe::Alltime, ::stats::Direction::Download);
+    
     body.RegisterValue("flag", flag);
     body.RegisterValue("user", user.Name());
-    body.RegisterValue("files_up", upStats[user.ID()].Files());
-    body.RegisterSize("size_up", upStats[user.ID()].KBytes());
-    body.RegisterValue("files_dn", dnStats[user.ID()].Files());
-    body.RegisterSize("size_dn", dnStats[user.ID()].KBytes());
-    body.RegisterValue("ratio", acl::RatioString(user));
-    body.RegisterValue("weekly_allot", acl::WeeklyAllotmentString(user));
+    body.RegisterValue("files_up", upStats.Files());
+    body.RegisterSize("size_up", upStats.KBytes());
+    body.RegisterSpeed("speed_up", upStats.Speed());
+    body.RegisterValue("files_dn", dnStats.Files());
+    body.RegisterSize("size_dn", dnStats.KBytes());
+    body.RegisterSpeed("speed_dn", dnStats.Speed());
+    body.RegisterValue("ratio", acl::FormatRatio(user.DefaultRatio()));
+    body.RegisterSize("weekly_allot", user.DefaultWeeklyAllotment());
     os << body.Compile();
   }
   

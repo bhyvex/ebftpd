@@ -1,4 +1,18 @@
-#include <boost/lexical_cast.hpp>
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <netdb.h>
 #include "util/net/resolver.hpp"
 #include "util/scopeguard.hpp"
@@ -37,21 +51,8 @@ Resolver::~Resolver()
 
 void Resolver::Resolve()
 {
-  const char* charService = nullptr;
-  if (port >= 0)
-  {
-    std::string service;
-    try
-    {
-      service = boost::lexical_cast<std::string>(port);
-    }
-    catch (const boost::bad_lexical_cast&)
-    {
-      throw NetworkError("Invalid port number");
-    }
-    
-    charService = service.c_str();
-  }
+  std::string service;
+  if (port >= 0) service = std::to_string(port);
 
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints));
@@ -59,10 +60,8 @@ void Resolver::Resolve()
   hints.ai_flags = AI_PASSIVE;
   hints.ai_socktype = static_cast<int>(socketType);
 
-  const char* charHostname = nullptr;
-  if (!hostname.empty()) charHostname = hostname.c_str();
-  
-  int error = getaddrinfo(charHostname, charService, &hints, &res);
+  int error = getaddrinfo(hostname.empty() ? nullptr : hostname.c_str(), 
+                          service.empty() ? nullptr : service.c_str(), &hints, &res);
   if (error)
   {
     if (error == EAI_SYSTEM) throw NetworkSystemError(errno);

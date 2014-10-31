@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <iterator>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
@@ -23,9 +38,9 @@ namespace ftp
 
 struct OnlineXfer
 {
-	boost::posix_time::ptime start;
-	long long bytes;
-	stats::Direction direction;
+  boost::posix_time::ptime start;
+  long long bytes;
+  stats::Direction direction;
   
   OnlineXfer(stats::Direction direction, const boost::posix_time::ptime& start);
 };
@@ -34,21 +49,21 @@ struct OnlineClient
 {
   static const unsigned maximumIdentLength = 513;
 
-	acl::UserID uid;
-	boost::posix_time::ptime lastCommand;
-	char command[BUFSIZ];
-	char workDir[PATH_MAX];
-	char ident[maximumIdentLength];
-	char ip[INET6_ADDRSTRLEN];
+  acl::UserID uid;
+  boost::posix_time::ptime lastCommand;
+  char command[BUFSIZ];
+  char workDir[PATH_MAX];
+  char ident[maximumIdentLength];
+  char ip[INET6_ADDRSTRLEN];
 #if defined(__FreeBSD__)
   char hostname[MAXHOSTNAMELEN];
 #else
-	char hostname[HOST_NAME_MAX];
+  char hostname[HOST_NAME_MAX];
 #endif
-	
+  
   boost::optional<OnlineXfer> xfer;
 
-	OnlineClient(acl::UserID uid, const std::string& ident, 
+  OnlineClient(acl::UserID uid, const std::string& ident, 
                const std::string& ip, const std::string& hostname,
                const std::string& workDir);
                
@@ -77,7 +92,7 @@ class OnlineWriter
   std::unique_ptr<boost::interprocess::managed_shared_memory> segment;
   OnlineData* data;
 
-	static std::unique_ptr<OnlineWriter> instance;
+  static std::unique_ptr<OnlineWriter> instance;
   constexpr static float clientOverhead = 0.02;
   constexpr static size_t clientSize = sizeof(OnlineClient) * (1 + clientOverhead);
 
@@ -85,23 +100,23 @@ class OnlineWriter
   void OpenSharedMemory(int maxClients);
 
   void LoggedIn(long tid, Client& client, const std::string& workDir);
-	void LoggedOut(long tid);
-	void Command(long tid, const std::string& command);
-	void Idle(long tid);
+  void LoggedOut(long tid);
+  void Command(long tid, const std::string& command);
+  void Idle(long tid);
 
-	void StartTransfer(long tid, stats::Direction direction, const boost::posix_time::ptime& start);
-	void TransferUpdate(long tid, long long bytes);
-	void StopTransfer(long tid);
+  void StartTransfer(long tid, stats::Direction direction, const boost::posix_time::ptime& start);
+  void TransferUpdate(long tid, long long bytes);
+  void StopTransfer(long tid);
   
 public:
   ~OnlineWriter();
   
   void LoggedIn(const boost::thread::id& tid, Client& client, const std::string& workDir);
-	void LoggedOut(const boost::thread::id& tid);
-	void Command(const boost::thread::id& tid, const std::string& command);
-	void Idle(const boost::thread::id& tid);
+  void LoggedOut(const boost::thread::id& tid);
+  void Command(const boost::thread::id& tid, const std::string& command);
+  void Idle(const boost::thread::id& tid);
   
-	static void Initialise(const std::string& id, int maxClients)
+  static void Initialise(const std::string& id, int maxClients)
   {
     instance.reset(new OnlineWriter(id, maxClients));
   }

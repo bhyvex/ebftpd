@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <boost/thread/thread.hpp>
 #include <sys/select.h>
 #include <poll.h>
@@ -51,6 +66,7 @@ void Data::InitPassive(util::net::Endpoint& ep, PassiveType pasvType)
   listener.Close();
   
   boost::optional<util::net::IPAddress> ip;
+  
   // unable to use alternative pasv_addr if espv mode isn't Full
   // should we fail -- or substitute the ip 
   // from the client.Control.LocalEndpoint like now?
@@ -107,7 +123,16 @@ void Data::InitPassive(util::net::Endpoint& ep, PassiveType pasvType)
   }
 
   this->pasvType = pasvType;
-  ep = listener.Endpoint();
+  
+  const std::string& natAddr = cfg::Get().NATAddr();
+  if (!natAddr.empty())
+  {
+    ep = Endpoint(IPAddress(natAddr), listener.Endpoint().Port());
+  }
+  else
+  {
+    ep = listener.Endpoint();
+  }
 }
 
 void Data::InitActive(const util::net::Endpoint& ep)
@@ -196,11 +221,12 @@ void Data::Open(TransferType transferType)
   if (protection)
   {
     util::net::TLSSocket::HandshakeRole role = util::net::TLSSocket::Server;
-    if ((sscnMode == ftp::SSCNMode::Client || 
-         pasvType == PassiveType::CPSV) && 
-        (transferType == TransferType::Upload ||
-         transferType == TransferType::Download))
+    if ((sscnMode == ftp::SSCNMode::Client || pasvType == PassiveType::CPSV) && 
+        (transferType == TransferType::Upload || transferType == TransferType::Download))
+    {
       role = util::net::TLSSocket::Client;  
+    }
+    
     socket.HandshakeTLS(role);
   }
   

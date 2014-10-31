@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <unistd.h>
 #include <cerrno>
 #include <sys/statvfs.h>
@@ -91,6 +106,21 @@ off_t Status::Size() const
   return native.st_size;
 }
 
+time_t Status::AccessTime() const
+{
+  return native.st_atime;
+}
+
+time_t Status::ModTime() const
+{
+  return native.st_mtime;
+}
+
+time_t Status::ChangeTime() const
+{
+  return native.st_ctime;
+}
+
 const struct stat& Status::Native() const
 {
   return native;
@@ -126,14 +156,20 @@ off_t Size(const std::string& path)
   return -1;
 }
 
+time_t ModTime(const std::string& path)
+{
+  try { return Status(path).ModTime(); } catch (const util::SystemError&) { }
+  return -1;  
+}
+
 util::Error FreeDiskSpace(const std::string& real, unsigned long long& freeBytes)
 {
   struct statvfs sfs;
-
   if (statvfs(real.c_str(), &sfs) <0)
     return util::Error::Failure(errno);
 
-  freeBytes = sfs.f_bsize * sfs.f_bfree;
+  freeBytes = static_cast<unsigned long long>(sfs.f_bsize) * 
+              static_cast<unsigned long long>(sfs.f_bavail);
   return util::Error::Success();
 }
 

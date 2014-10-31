@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __CFG_SETTING_HPP
 #define __CFG_SETTING_HPP
 
@@ -20,26 +35,30 @@ class seconds;
 namespace cfg
 {
 
+class Config;
+
 class Database
 {
   std::string name;
-  std::string address;
-  std::string host;
-  int port;
+  std::vector<std::pair<std::string, int>> hosts;
   std::string login;
   std::string password;
+  std::string replicaSet;
   
 public:
-  Database();
-  Database(const std::vector<std::string>& toks);
+  Database() = default;
+  Database(const char* name, const char* address, int port, const char* login, const char* password);
   
   const std::string& Name() const { return name; }
-  const std::string& Address() const { return address; }
-  int Port() const { return port; }
-  const std::string& Host() const { return host; }
+  std::string URL() const;
   const std::string& Login() const { return login; }
   const std::string& Password() const { return password; }
   bool NeedAuth() const;
+  
+  bool operator==(const Database& rhs) const;
+  bool operator!=(const Database& rhs) const { return !operator==(rhs); }
+  
+  friend class Config;
 };
 
 class Right
@@ -140,7 +159,7 @@ class SimXfers
   int maxUploads;
   
 public:
-  SimXfers() : maxDownloads(-1), maxUploads(-1) { }
+  SimXfers(int maxDownloads, int maxUploads);
   SimXfers(std::vector<std::string> toks);
   int MaxDownloads() const { return maxDownloads; }
   int MaxUploads() const { return maxUploads; }
@@ -184,11 +203,7 @@ class AllowFxp
   acl::ACL acl;
   
 public:
-  AllowFxp() :
-    downloads(true), uploads(true), 
-    logging(false), acl("*")
-  { }
-  
+  AllowFxp(bool downloads, bool uploads, bool logging, const char* acl);
   AllowFxp(std::vector<std::string> toks);
   bool Downloads() const { return downloads; }
   bool Uploads() const { return uploads; }
@@ -219,7 +234,7 @@ public:
   PathFilter(PathFilter&& other);
   ~PathFilter();
   
-  PathFilter();
+  PathFilter(const char* regex, const char* acl);
   PathFilter(std::vector<std::string> toks);
   const boost::regex& Regex() const;
   const acl::ACL& ACL() const { return acl; }
@@ -232,11 +247,18 @@ class MaxUsers
   int exemptUsers;
   
 public:
-  MaxUsers() : users(50), exemptUsers(5) { }
+  MaxUsers(int users, int exemptUsers);
   MaxUsers(const std::vector<std::string>& toks);
   int Users() const { return users; }
   int ExemptUsers() const { return exemptUsers; }
   int Total() const { return users + exemptUsers; }
+
+  bool operator==(const MaxUsers& rhs) const
+  {
+    return users == rhs.users && exemptUsers == rhs.exemptUsers;
+  }
+  
+  bool operator!=(const MaxUsers& rhs) const { return !operator==(rhs); }
 };
 
 class Lslong
@@ -245,7 +267,7 @@ class Lslong
   int maxRecursion;
   
 public:
-  Lslong() : options("l"), maxRecursion(2) { }
+  Lslong(const char* options, int maxRecursion);
   Lslong(std::vector<std::string> toks);
   const std::string& Options() const { return options; }
   int MaxRecursion() const { return maxRecursion; }
@@ -260,18 +282,6 @@ public:
   HiddenFiles(std::vector<std::string> toks);
   const std::string& Path() const { return path; }
   const std::vector<std::string>& Masks() const { return masks; }
-};
-
-class Requests
-{
-  std::string path;
-  int max;
-  
-public:
-  Requests() : max(10) { }
-  Requests(const std::vector<std::string>& toks);
-  const std::string& Path() const { return path; }                              
-  int Max() const { return max; }
 };
 
 class Creditcheck
@@ -300,21 +310,24 @@ public:
   const std::string& Path() const { return path; }
 };
 
-class NukedirStyle
+class NukeStyle
 {
 public:
-  enum Action { DeleteAll, DeleteFiles, Keep };
+  enum Action { DeleteAll, KeepDir, Keep };
 
 private:
   std::string format;
   Action action;
   long long emptyKBytes;
+  long long emptyPenalty;
 
 public:
-  NukedirStyle();
-  NukedirStyle(const std::vector<std::string>& toks);
+  NukeStyle(const std::string& format, Action action, 
+            long long emptyKBytes, long long emptyPenalty);
+  NukeStyle(const std::vector<std::string>& toks);
   const std::string& Format() const { return format; }
   long long EmptyKBytes() const { return emptyKBytes; }
+  long long EmptyPenalty() const { return emptyPenalty; }
   Action GetAction() const { return action; }
 };
 
@@ -349,6 +362,7 @@ public:
   
 private:
   std::string command;
+  std::string syntax;
   Type type;
   std::string description;
   std::string target;
@@ -357,6 +371,7 @@ private:
 public:
   SiteCmd(const std::vector<std::string>& toks);
   const std::string& Command() const { return command; }
+  const std::string& Syntax() const { return syntax; }
   Type GetType() const { return type; }
   const std::string& Description() const { return description; }
   const std::string& Arguments() const { return arguments; }
@@ -392,7 +407,7 @@ public:
   IdleTimeout(const IdleTimeout& other);
   IdleTimeout(IdleTimeout&& other);
 
-  IdleTimeout();
+  IdleTimeout(long maximum, long minimum, long timeout);
   IdleTimeout(const std::vector<std::string>& toks);
   ~IdleTimeout();
     
@@ -452,6 +467,25 @@ public:
   
   bool Uploads() const { return uploads; }
   bool Downloads() const { return downloads; }
+};
+
+class NukeMax
+{
+  int multiplier;
+  int percent;
+  
+public:
+  NukeMax(int multiplier, int percent) :
+    multiplier(multiplier),
+    percent(percent)
+  { }
+  
+  NukeMax(const std::vector<std::string>& toks);
+  
+  int Multiplier() const { return multiplier; }
+  int Percent() const { return percent; }
+  
+  bool IsOkay(int value, bool isPercent) const;
 };
 
 }

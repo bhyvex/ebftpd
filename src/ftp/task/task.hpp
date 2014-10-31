@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __FTP_TASK_TASK_HPP
 #define __FTP_TASK_TASK_HPP
 
@@ -22,7 +37,11 @@ namespace task
 
 class Task : public std::enable_shared_from_this<Task>
 {
+  Task& operator=(const Task&) = delete;
+  Task(const Task&) = delete;
+
 public:
+  Task() = default;
   virtual ~Task() { }
   virtual void Execute(Server& server) = 0;
   void Push();
@@ -36,7 +55,12 @@ class KickUser : public Task
   
 public:
   KickUser(acl::UserID uid, std::future<int>& future, bool oneOnly = false) : 
-    uid(uid), oneOnly(oneOnly) { future = promise.get_future(); }
+    uid(uid), 
+    oneOnly(oneOnly) 
+  {
+    future = promise.get_future(); 
+  }
+  
   void Execute(Server& server);
 };
 
@@ -58,18 +82,6 @@ private:
 public:
   LoginKickUser(acl::UserID uid, std::future<Result>& future) : uid(uid)
   { future = promise.get_future(); }
-  void Execute(Server& server);
-};
-
-class GetOnlineUsers : public Task
-{
-  std::vector<ftp::task::WhoUser>& users;
-  std::promise<bool> promise;
-  
-public:
-  GetOnlineUsers(std::vector<ftp::task::WhoUser>& users, std::future<bool>& future) : 
-    users(users) { future = promise.get_future(); }
-    
   void Execute(Server& server);
 };
 

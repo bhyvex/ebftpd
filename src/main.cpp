@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <memory>
 #include <cstring>
 #include <boost/program_options/options_description.hpp>
@@ -132,126 +147,126 @@ bool Daemonise(bool foreground)
   return true;
 }
 
-int main(int argc, char** argv)
+int Main(int argc, char** argv)
 {
-  int exitStatus = 0;
+  logs::SetThreadIDPrefix('P' /* parent */);
+  
+  std::string configPath;
+  bool foreground; 
 
+  if (!ParseOptions(argc, argv, foreground, configPath)) return 1;
+
+  logs::InitialisePreConfig();
+  
+  logs::Debug("Starting %1%..", programFullname);
+  auto byeExit = util::MakeScopeExit([]() { logs::Debug("Bye!"); });
+  
+  cmd::rfc::Factory::Initialise();
+  cmd::site::Factory::Initialise();
+  cfg::Config::PopulateACLKeywords(cmd::site::Factory::ACLKeywords());
+  ftp::InitialisePortAllocators();
+  ftp::InitialiseAddrAllocators();
+  fs::InitialiseUmask();
+  
+  try
   {
-    std::string configPath;
-    bool foreground; 
-
-    if (!ParseOptions(argc, argv, foreground, configPath)) return 1;
-
-    logs::InitialisePreConfig();
-    
-    logs::Debug("Starting %1%..", programFullname);
-    auto byeExit = util::MakeScopeExit([]() { logs::Debug("Bye!"); });
-    
+    logs::Debug("Loading config file..");
+    cfg::UpdateShared(cfg::Config::Load(configPath));
+  }
+  catch (const cfg::ConfigError& e)
+  {
+    logs::Error("Failed to load config: %1%", e.Message());
+    return 1;
+  }
+  
+  {
+    util::Error e = signals::Initialise(util::path::Join(cfg::Get().Datapath(), "logs"));
+    if (!e)
     {
-      util::Error e = signals::Initialise();
-      if (!e)
-      {
-        logs::Error("Failed to setup signal handlers: %1%", e.Message());
-        return 1;
-      }
-      signals::Handler::StartThread();
+      logs::Error("Failed to setup signal handlers: %1%", e.Message());
+      return 1;
     }
-    
-    auto signalsExit = util::MakeScopeExit([]() { signals::Handler::StopThread(); });
+  }
 
-    cmd::rfc::Factory::Initialise();
-    cmd::site::Factory::Initialise();
-    cfg::Config::PopulateACLKeywords(cmd::site::Factory::ACLKeywords());
-    ftp::InitialisePortAllocators();
-    ftp::InitialiseAddrAllocators();
-    fs::InitialiseUmask();
-    
+  if (!logs::InitialisePostConfig()) return 1;
+  
+  if (cfg::Get().TlsCertificate().empty())
+  {
+    logs::Debug("No TLS certificate set in config, TLS disabled.");
+  }
+  else
+  {
     try
     {
-      logs::Debug("Loading config file..");
-      cfg::UpdateShared(cfg::Config::Load(configPath));
+      const cfg::Config& config = cfg::Get();
+      logs::Debug("Initialising TLS context..");
+      util::net::TLSServerContext::Initialise(programName, config.TlsCertificate(), config.TlsCiphers());
+      util::net::TLSClientContext::Initialise(config.TlsCertificate(), config.TlsCiphers());
     }
-    catch (const cfg::ConfigError& e)
+    catch (const util::net::NetworkError& e)
     {
-      logs::Error("Failed to load config: %1%", e.Message());
+      logs::Error("TLS failed to initialise: %1%", e.Message());
+      return 1;
+    }
+  }
+
+  logs::Debug("Initialising Templates..");
+  try
+  {
+    text::Factory::Initialize();
+  }
+  catch (const text::TemplateError& e)
+  {
+    logs::Error("Templates failed to initialise: %1%", e.Message());
+    return 1;
+  }
+  
+  if (!db::Initialise([](acl::UserID uid)
+        { std::make_shared<ftp::task::UserUpdate>(uid)->Push(); }))
+  {
+    return 1;
+  }
+  
+  if (!acl::CreateDefaults())
+  {
+    logs::Error("Error while creating root user and group and default user template");
+    return 1;
+  }
+
+  if (!AlreadyRunning())
+  {
+    if (!ftp::Server::Initialise(cfg::Get().ValidIp(), cfg::Get().Port()))
+    {
+      logs::Error("Listener failed to initialise!");
       return 1;
     }
     
-    if (!logs::InitialisePostConfig()) return 1;
-    
-    if (cfg::Get().TlsCertificate().empty())
-    {
-      logs::Debug("No TLS certificate set in config, TLS disabled.");
-    }
-    else
+    if (Daemonise(foreground))
     {
       try
       {
-        logs::Debug("Initialising TLS context..");
-        util::net::TLSServerContext::Initialise(
-            cfg::Get().TlsCertificate(), cfg::Get().TlsCiphers());
-        util::net::TLSClientContext::Initialise(
-            cfg::Get().TlsCertificate(), cfg::Get().TlsCiphers());
-      }
-      catch (const util::net::NetworkError& e)
-      {
-        logs::Error("TLS failed to initialise: %1%", e.Message());
-        return 1;
-      }
-    }
-
-    logs::Debug("Initialising Templates..");
-    try
-    {
-      text::Factory::Initialize();
-    }
-    catch (const text::TemplateError& e)
-    {
-      logs::Error("Templates failed to initialise: %1%", e.Message());
-      return 1;
-    }
-    
-    if (!db::Initialise([](acl::UserID uid)
-          { std::make_shared<ftp::task::UserUpdate>(uid)->Push(); }))
-    {
-      return 1;
-    }
-    
-    if (!acl::CreateDefaults())
-    {
-      logs::Error("Error while creating root user and group and default user template");
-      return 1;
-    }
-
-    try
-    {
-      ftp::OnlineWriter::Initialise(ftp::SharedMemoryID(), cfg::Config::MaxOnline().Total());
-    }
-    catch (const util::SystemError& e)
-    {
-      logs::Error("Shared memory segment failed to initialise: %1%", e.Message());
-      return 1;
-    }
-    
-    if (!AlreadyRunning())
-    {
-      if (!ftp::Server::Initialise(cfg::Get().ValidIp(), cfg::Get().Port()))
-      {
-        logs::Error("Listener failed to initialise!");
-        exitStatus = 1;
-      }
-      else if (Daemonise(foreground))
-      {
+        ftp::OnlineWriter::Initialise(ftp::SharedMemoryID(), cfg::Config::MaxOnline().Total());
+        signals::Handler::StartThread();
         db::Replicator::Get().Start();
         ftp::Server::Get().StartThread();
         ftp::Server::Get().JoinThread();
         db::Replicator::Get().Stop();
         ftp::Server::Cleanup();
+        signals::Handler::StopThread();
+        ftp::OnlineWriter::Cleanup();
+      }
+      catch (const util::SystemError& e)
+      {
+        logs::Error("Shared memory segment failed to initialise: %1%", e.Message());
+        return 1;
       }
     }
-
-    ftp::OnlineWriter::Cleanup();
   }
+  
+  return 0;
+}
 
-  return exitStatus;
+int main(int argc, char** argv)
+{
+  _exit(Main(argc, argv)); // horrible work around for mongodb driver bug
 }

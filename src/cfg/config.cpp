@@ -1,6 +1,20 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <iostream>
 #include <fstream>
-#include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include "cfg/config.hpp"
 #include "cfg/error.hpp"
@@ -10,6 +24,8 @@
 #include "util/format.hpp"
 #include "cfg/util.hpp"
 #include "fs/mode.hpp"
+#include "cfg/defaults.hpp"
+#include "fs/path.hpp"
 
 namespace util
 {
@@ -55,37 +71,40 @@ Config::Config(const std::string& configPath, bool tool) :
   tool(tool),
   currentSection(nullptr),
   port(-1),
-  freeSpace(ParseSize("1G")),
-  sitenameLong("EBFTPD"),
-  sitenameShort("EB"),
-  datapath("data"),
-  bouncerOnly(false),
-  securityLog("security", true, true, 0),
-  databaseLog("database", true, true, 0),
-  eventLog("events", true, true, 0),
-  errorLog("errors", true, true, 0),
-  debugLog("debug", true, true, 0),
-  siteopLog("siteop", true, true, 0),
-  transferLog("transfer", false, false, 0, false, false),
-  dlIncomplete(true),
-  totalUsers(-1),
-  multiplierMax(10),
-  emptyNuke(102400),
-  maxSitecmdLines(1000),
-  weekStart(::cfg::WeekStart::Sunday),
-  epsvFxp(::cfg::EPSVFxp::Allow),
-  maximumRatio(10),
-  dirSizeDepth(2),
-  asyncCRC(false),
-  identLookup(true),
-  dnsLookup(true),
-  logAddresses(cfg::LogAddresses::Always),
-  umask(fs::CurrentUmask()),
-  defaultLogLines(100),
-  tlsControl("*"),
-  tlsListing("*"),
-  tlsData("!*"),
-  tlsFxp("!*")
+  freeSpace(defaultFreeSpace),
+  sitenameLong(defaultSitenameLong),
+  sitenameShort(defaultSitenameShort),
+  bouncerOnly(defaultBouncerOnly),
+  simXfers(defaultSimXfers),
+  securityLog(defaultSecurityLog),
+  databaseLog(defaultDatabaseLog),
+  eventLog(defaultEventLog),
+  errorLog(defaultErrorLog),
+  debugLog(defaultDebugLog),
+  siteopLog(defaultSiteopLog),
+  transferLog(defaultTransferLog),
+  maxUsers(defaultMaxUsers),
+  dlIncomplete(defaultDlIncomplete),
+  totalUsers(defaultTotalUsers),
+  lslong(defaultLslong),
+  nukeMax(defaultNukeMax),
+  nukedirStyle(defaultNukeStyle),
+  maxSitecmdLines(defaultMaxSitecmdLines),
+  idleTimeout(defaultIdleTimeout),
+  epsvFxp(defaultEpsvFxp),
+  maximumRatio(defaultMaximumRatio),
+  dirSizeDepth(defaultDirSizeDepth),
+  asyncCRC(defaultAsyncCRC),
+  identLookup(defaultIdentLookup),
+  dnsLookup(defaultDnsLookup),
+  logAddresses(defaultLogAddresses),
+  umask(defaultUmask),
+  logLines(defaultLogLines),
+  dataBufferSize(defaultDataBufferSize),
+  tlsControl(defaultTlsControl),
+  tlsListing(defaultTlsListing),
+  tlsData(defaultTlsData),
+  tlsFxp(defaultTlsFxp)
 {
   std::string line;
   std::ifstream io(configPath.c_str());
@@ -126,8 +145,7 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     std::string keyword(opt.substr(1));
     if (aclKeywords.find(keyword) == aclKeywords.end() && !tool)
       throw ConfigError("Invalid command acl keyword: " + keyword);
-    commandACLs.insert(std::make_pair(keyword, 
-        acl::ACL(util::Join(toks, " "))));
+    commandACLs.insert(std::make_pair(keyword, acl::ACL(util::Join(toks, " "))));
   }
   else
   if (util::StartsWith(opt, "custom-"))
@@ -140,14 +158,40 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     {
       throw ConfigError("Invalid custom command acl keyword: " + command);
     }
-    commandACLs.insert(std::make_pair(util::ToLowerCopy(opt), 
-        acl::ACL(util::Join(toks, " "))));
+    commandACLs.insert(std::make_pair(util::ToLowerCopy(opt), acl::ACL(util::Join(toks, " "))));
   }
   else
-  if (opt == "database")
+  if (opt == "db_name")
   {
-    ParameterCheck(opt, toks, 3, 5);
-    database = ::cfg::Database(toks);
+    ParameterCheck(opt, toks, 1, 1);
+    database.name = toks[0];
+  }
+  else
+  if (opt == "db_host")
+  {
+    ParameterCheck(opt, toks, 1, -1);
+    for (const std::string& tok : toks)
+    {
+      std::vector<std::string> hostPair;
+      util::Split(hostPair, tok, ":");
+      if (hostPair.size() != 2) throw std::bad_cast();
+      int port = util::StrToInt(hostPair[1]);
+      if (port < 0 || port > 65535) throw std::bad_cast();
+      database.hosts.emplace_back(hostPair[0], port);
+    }
+  }
+  else
+  if (opt == "db_auth")
+  {
+    ParameterCheck(opt, toks, 2);
+    database.login = toks[0];
+    database.password = toks[1];
+  }
+  else
+  if (opt == "db_replicaset")
+  {
+    ParameterCheck(opt, toks, 1);
+    database.replicaSet = toks[0];
   }
   else
   if (opt == "sitepath")
@@ -164,8 +208,8 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
   else if (opt == "port")
   {
     ParameterCheck(opt, toks, 1);
-    port = boost::lexical_cast<int>(toks[0]);
-    if (port < 0 || port > 65535) throw boost::bad_lexical_cast();
+    port = util::StrToInt(toks[0]);
+    if (port < 0 || port > 65535) throw std::bad_cast();
   }
   else if (opt == "tls_certificate")
   {
@@ -203,25 +247,19 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
   else if (opt == "total_users")
   {
     ParameterCheck(opt, toks, 1);
-    totalUsers = boost::lexical_cast<int>(toks[0]);
-    if (totalUsers < -1) throw boost::bad_lexical_cast();
+    totalUsers = util::StrToInt(toks[0]);
+    if (totalUsers < -1) throw std::bad_cast();
   }
-  else if (opt == "multiplier_max")
+  else if (opt == "nuke_max")
   {
-    ParameterCheck(opt, toks, 1);
-    multiplierMax = boost::lexical_cast<int>(toks[0]);
-    if (multiplierMax < 1) throw boost::bad_lexical_cast();
-  }
-  else if (opt == "empty_nuke")
-  {
-    ParameterCheck(opt, toks, 1);
-    emptyNuke = ParseSize(toks[0]);
+    ParameterCheck(opt, toks, 2);
+    nukeMax = ::cfg::NukeMax(toks);
   }
   else if (opt == "max_sitecmd_lines")
   {
     ParameterCheck(opt, toks, 1);
-    maxSitecmdLines = boost::lexical_cast<int>(toks[0]);
-    if (maxSitecmdLines < -1) throw boost::bad_lexical_cast();
+    maxSitecmdLines = util::StrToInt(toks[0]);
+    if (maxSitecmdLines < -1) throw std::bad_cast();
   }
   else if (opt == "dl_incomplete")
   {
@@ -359,6 +397,11 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     ParameterCheck(opt, toks, 1, -1);
     pasvAddr.insert(pasvAddr.end(), toks.begin(), toks.end());
   }
+  else if (opt == "nat_addr")
+  {
+    ParameterCheck(opt, toks, 1);
+    natAddr = toks[0];
+  }
   else if (opt == "active_ports")
   {
     ParameterCheck(opt, toks, 1, -1);
@@ -433,15 +476,15 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     ParameterCheck(opt, toks, 2, -1);
     renameown.emplace_back(toks);
   }
-  else if (opt == "filemove")
+  else if (opt == "move")
   {
     ParameterCheck(opt, toks, 2, -1);
-    filemove.emplace_back(toks);
+    move.emplace_back(toks);
   }
-  else if (opt == "filemoveown")
+  else if (opt == "moveown")
   {
     ParameterCheck(opt, toks, 2, -1);
-    filemoveown.emplace_back(toks);
+    moveown.emplace_back(toks);
   }
   else if (opt == "makedir")
   {
@@ -563,10 +606,10 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     ParameterCheck(opt, toks, 3, -1);
     creditloss.emplace_back(toks);
   }
-  else if (opt == "nukedir_style")
+  else if (opt == "nuke_style")
   {
-    ParameterCheck(opt, toks, 3);
-    nukedirStyle = NukedirStyle(toks);
+    ParameterCheck(opt, toks, 4);
+    nukedirStyle = ::cfg::NukeStyle(toks);
   }
   else if (opt == "msg_path")
   {
@@ -587,14 +630,6 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
   {
     ParameterCheck(opt, toks, 3);
     idleTimeout = ::cfg::IdleTimeout(toks);
-  }
-  else if (opt == "week_start")
-  {
-    ParameterCheck(opt, toks, 1);
-    util::ToLower(toks[0]);
-    if (toks[0] == "sunday") weekStart = ::cfg::WeekStart::Sunday;
-    else if (toks[0] == "monday") weekStart = ::cfg::WeekStart::Monday;
-    else throw ConfigError("week_start must be either sunday or monday.");
   }
   else if (opt == "pre_check")
   {
@@ -631,14 +666,14 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
   else if (opt == "maximum_ratio")
   {
     ParameterCheck(opt, toks, 1);
-    maximumRatio = boost::lexical_cast<int>(toks[0]);
-    if (maximumRatio < 0) throw boost::bad_lexical_cast();
+    maximumRatio = util::StrToInt(toks[0]);
+    if (maximumRatio < 0) throw std::bad_cast();
   }
   else if (opt == "dir_size_depth")
   {
     ParameterCheck(opt, toks, 1);
-    dirSizeDepth = boost::lexical_cast<int>(toks[0]);
-    if (dirSizeDepth < 0) throw boost::bad_lexical_cast();
+    dirSizeDepth = util::StrToInt(toks[0]);
+    if (dirSizeDepth < 0) throw std::bad_cast();
   }
   else if (opt == "async_crc")
   {
@@ -659,7 +694,7 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
   {
     ParameterCheck(opt, toks, 1);
     if (!util::EnumFromString(toks[0], logAddresses))
-      throw boost::bad_lexical_cast();
+      throw std::bad_cast();
   }
   else if (opt == "umask")
   {
@@ -670,14 +705,20 @@ void Config::ParseGlobal(const std::string& opt, std::vector<std::string>& toks)
     }
     catch (const fs::InvalidModeString&)
     {
-      throw boost::bad_lexical_cast();
+      throw std::bad_cast();
     }
   }
-  else if (opt == "default_log_lines")
+  else if (opt == "log_lines")
   {
     ParameterCheck(opt, toks, 1);
-    defaultLogLines = boost::lexical_cast<int>(toks[0]);
-    if (defaultLogLines < 0) throw boost::bad_lexical_cast();
+    logLines = util::StrToInt(toks[0]);
+    if (logLines < 0) throw std::bad_cast();
+  }
+  else if (opt == "data_buffer_size")
+  {
+    ParameterCheck(opt, toks, 1);
+    dataBufferSize = util::StrToInt(toks[0]);
+    if (dataBufferSize < 0) throw std::bad_cast();
   }
   else if (opt == "tls_control")
   {
@@ -716,8 +757,8 @@ void Config::ParseSection(const std::string& opt, std::vector<std::string>& toks
   else if (opt == "ratio")
   {
     ParameterCheck(opt, toks, 1);
-    currentSection->ratio = boost::lexical_cast<int>(toks[0]);
-    if (currentSection->ratio < 0) throw boost::bad_lexical_cast();
+    currentSection->ratio = util::StrToInt(toks[0]);
+    if (currentSection->ratio < 0) throw std::bad_cast();
   }
   else if (opt == "endsection")
   {
@@ -774,10 +815,24 @@ void Config::SanityCheck()
   }
   
   if (loginPrompt.empty())
+  {
     loginPrompt = sitenameLong + ": ebftpd connected.";
+  }
     
-  if (allowFxp.empty()) allowFxp.emplace_back();
-  if (pathFilter.empty()) pathFilter.emplace_back();
+  if (allowFxp.empty()) allowFxp.emplace_back(defaultAllowFxp);
+  if (pathFilter.empty()) pathFilter.emplace_back(defaultPathFilter);
+  
+  if (!CheckSetting("db_name")) database.name = defaultDatabaseName;
+  if (!CheckSetting("db_host"))
+  {
+    database.hosts.push_back(std::make_pair(std::string(defaultDatabaseAddress), 
+                                            defaultDatabasePort));
+  }
+  
+  if (database.hosts.size() > 1 && !CheckSetting("db_replicaset"))
+  {
+    throw RequiredSettingError("db_replicaset");
+  }
 }
 
 bool Config::IsBouncer(const std::string& ip) const
@@ -788,8 +843,10 @@ bool Config::IsBouncer(const std::string& ip) const
 
 }
 
-boost::optional<const Section&> Config::SectionMatch(const std::string& path) const
+boost::optional<const Section&> Config::SectionMatch(std::string path, bool isDir) const
 {
+  if (path.empty()) return boost::none;
+  if (isDir && path.back() != '/') path += '/';
   for (const auto& kv : sections)
   {
     if (kv.second.IsMatch(path)) 
@@ -837,11 +894,13 @@ bool Config::IsEventLogged(const std::string& path) const
 
 bool Config::IsDupeLogged(const std::string& path) const
 {
+  if (path.empty()) return false;
   return util::WildcardMatch(dupepath, path + (path.back() != '/' ? "/" : ""));
 }
 
 bool Config::IsIndexed(const std::string& path) const
 {
+  if (path.empty()) return false;
   return util::WildcardMatch(indexpath, path + (path.back() != '/' ? "/" : ""));
 }
 

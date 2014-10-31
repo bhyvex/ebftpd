@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <cassert>
 #include <boost/algorithm/string/replace.hpp>
 #include "db/connection.hpp"
@@ -50,14 +65,17 @@ Connection::Connection(ConnectionMode mode) :
 
 void Connection::Create()
 {
-  boost::call_once(&CreateAuthenticateHook, once);  
+  boost::call_once(&InitialiseMongo, once);  
   boost::this_thread::disable_interruption noInterrupt;
   
   try
   {
     try
     {
-      scopedConn.reset(mongo::ScopedDbConnection::getScopedDbConnection(cfg::Get().Database().Host()));
+      std::string errmsg;
+      auto connStr = mongo::ConnectionString::parse(cfg::Get().Database().URL(), errmsg);
+      scopedConn.reset(mongo::ScopedDbConnection::getScopedDbConnection(connStr));
+      (void) errmsg;
     }
     catch (const mongo::DBException& e)
     {
@@ -77,8 +95,10 @@ void Connection::Create()
     scopedConn->conn().setWriteConcern(mongo::W_NONE);
 }
 
-void Connection::CreateAuthenticateHook()
+void Connection::InitialiseMongo()
 {
+  FILE* nullLog = fopen("/dev/null", "w");
+  if (nullLog != nullptr) mongo::Logstream::setLogFile(nullLog);
   mongo::pool.addHook(new AuthenticateHook());
 }
 
@@ -178,7 +198,7 @@ std::vector<mongo::BSONObj> Connection::Query(
     }
     catch (const mongo::DBException& e)
     {
-      LogException("Query", e, collection, query, nToReturn, nToSkip, *fieldsToReturn);
+      LogException("Query", e, collection, query, nToReturn, nToSkip, fieldsToReturn);
       if (mode == ConnectionMode::Safe) throw DBReadError();
     }
   }

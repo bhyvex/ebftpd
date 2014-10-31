@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include "cmd/site/factory.hpp"
 #include "cfg/get.hpp"
 #include "util/verify.hpp"
@@ -13,6 +28,7 @@
 #include "cmd/site/msg.hpp"
 #include "cmd/site/customcommand.hpp"
 #include "cmd/site/grpchange.hpp"
+#include "cmd/site/nuking.hpp"
 
 namespace cmd { namespace site
 {
@@ -113,6 +129,10 @@ Factory::Factory()
                       std::make_shared<Creator<TAKECommand>>(),
                       "Syntax: SITE TAKE [-S <section>] <user> <credits>G|M [<message>]",
                       "Take credits from user" }, },
+    { "STAT",       { 0,  1,  "stat",
+                      std::make_shared<Creator<STATCommand>>(),
+                      "Syntax: SITE STAT",
+                      "Display brief stats" }, },
     { "STATS",      { 0,  1,  "stats|statsown",
                       std::make_shared<Creator<STATSCommand>>(),
                       "Syntax: SITE STATS [<user>]",
@@ -135,32 +155,28 @@ Factory::Factory()
                       "Change user's groups" }, },
     { "RANKS",      { 3, -1,  "ranks|ranksalias",
                       std::make_shared<Creator<RANKSCommand>>(),
-                      "Syntax: SITE RANKS DAY|WEEK|MONTH|YEAR|ALL UP|DOWN SPEED|KBYTES|FILES [<number>] [<section>] [<acl> ..]",
+                      "Syntax: SITE RANKS DAY|WEEK|MONTH|YEAR|ALLTIME UP|DOWN SPEED|KBYTES|FILES [<number>] [<section>] [<acl> ..]",
                       "Display user upload/download rankings" }, },
     { "GPRANKS",    { 3, -1,  "gpranks|gpranksalias",
                       std::make_shared<Creator<GPRANKSCommand>>(),
-                      "Syntax: SITE GPRANKS DAY|WEEK|MONTH|YEAR|ALL UP|DOWN SPEED|KBYTES|FILES [<number>] [<section>]",
+                      "Syntax: SITE GPRANKS DAY|WEEK|MONTH|YEAR|ALLTIME UP|DOWN SPEED|KBYTES|FILES [<number>] [<section>]",
                       "Display group upload/download rankings" }, },
     { "NUKE",       { 3,  -1, "nuke",
-                      nullptr,
+                      std::make_shared<Creator<NUKECommand>>(),
                       "Syntax: SITE NUKE <path> <multiplier> <message>",
                       "Nuke a directory" }, },
     { "UNNUKE",     { 2, -1, "unnuke",
-                      nullptr,
+                      std::make_shared<Creator<UNNUKECommand>>(),
                       "Syntax: SITE UNNUKE <path> <message>",
                       "Unnuke a directory" }, },
     { "NUKES",      { 0,  2,  "nukes",
-                      nullptr,
+                      std::make_shared<Creator<NUKESCommand>>(),
                       "Syntax: SITE NUKES [<number>] [<section>]",
                       "Display nuke history" }, },
     { "UNNUKES",    { 0,  2,  "unnukes",
-                      nullptr,
+                      std::make_shared<Creator<UNNUKESCommand>>(),
                       "Syntax: SITE UNNUKES [<number>] [<section>]",
                       "Display unnuke history" }, },
-    { "PREDUPE",    { 1,  1,  "predupe",
-                      nullptr,
-                      "Syntax: SITE PREDUPE <filemask>",
-                      "Forcefully dupe all future uploads matching a file mask" }, },
     { "UPDATE",     { 1,  1,  "update",
                       std::make_shared<Creator<UPDATECommand>>(),
                       "Syntax: SITE UPDATE <pathmask>",
@@ -245,10 +261,6 @@ Factory::Factory()
                       std::make_shared<Creator<HELPCommand>>(),
                       "Syntax: SITE HELP [<command>]",
                       "Display site command help" }, },
-    { "STAT",       { 0,  0,  "stat",
-                      nullptr,
-                      "Syntax: SITE STAT",
-                      "Display statline" }, },
     { "TIME",       { 0,  0,  "time",
                       std::make_shared<Creator<TIMECommand>>(),
                       "Syntax: SITE TIME",
@@ -276,18 +288,6 @@ Factory::Factory()
                       "          SAVE [<index>]                     - Mark message(s) as saved\n"
                       "          PURGE [<index>]                    - Purge a message(s)",
                       "Messaging system" }, },
-    { "REQUEST",    { 1,  1,  "request",
-                      nullptr,
-                      "Syntax: SITE REQUEST <string>",
-                      "Add a request" }, },
-    { "REQFILLED",  { 1,  1,  "reqfilled",
-                      nullptr,
-                      "Syntax: SITE REQFILLED <number>",
-                      "Mark a request as filled" }, },
-    { "REQUESTS",   { 0,  2,  "requests",
-                      nullptr,
-                      "Syntax: SITE REQUESTS [<number>] [<string> ..]",
-                      "Display list of requests" }, },
     { "RELOAD",     { 0,  0,  "reload",
                       std::make_shared<Creator<RELOADCommand>>(),
                       "Syntax: SITE RELOAD",
@@ -323,17 +323,20 @@ CommandDefOpt Factory::LookupCustom(const std::string& command)
   {
     case cfg::SiteCmd::Type::Exec  :
     {
-      def.reset(CommandDef(aclKeyword, std::make_shared<CustomCreator<CustomEXECCommand>>(*match)));
+      def.reset(CommandDef(aclKeyword, match->Syntax(), match->Description(),
+                           std::make_shared<CustomCreator<CustomEXECCommand>>(*match)));
       break;
     }
     case cfg::SiteCmd::Type::Text  :
     {
-      def.reset(CommandDef(aclKeyword, std::make_shared<CustomCreator<CustomTEXTCommand>>(*match)));
+      def.reset(CommandDef(aclKeyword, match->Syntax(), match->Description(),
+                           std::make_shared<CustomCreator<CustomTEXTCommand>>(*match)));
       break;
     }
     case cfg::SiteCmd::Type::Alias :
     {
-      def.reset(CommandDef(aclKeyword, std::make_shared<CustomCreator<CustomALIASCommand>>(*match)));
+      def.reset(CommandDef(aclKeyword, match->Syntax(), match->Description(),
+                           std::make_shared<CustomCreator<CustomALIASCommand>>(*match)));
       break;
     }
     default                                 :
@@ -367,6 +370,45 @@ std::unordered_set<std::string> Factory::ACLKeywords()
     keywords.insert(curKeywords.begin(), curKeywords.end());
   }
   return keywords;
+}
+
+CommandDef::CommandDef(int minimumArgs, int maximumArgs,
+                       const std::string& aclKeyword,
+                       const std::shared_ptr<CreatorBase<cmd::Command>>& creator,
+                       const std::string& syntax,
+                       const std::string& description) :
+  minimumArgs(minimumArgs),
+  maximumArgs(maximumArgs),
+  aclKeyword(aclKeyword),
+  creator(creator),
+  syntax(syntax),
+  description(description)
+{ }
+
+CommandDef::CommandDef(const std::string& aclKeyword,
+                       const std::string& syntax,
+                       const std::string& description,
+                       const std::shared_ptr<CreatorBase<cmd::Command>>& creator) :
+  minimumArgs(0), 
+  maximumArgs(-1), 
+  aclKeyword(aclKeyword), 
+  creator(creator),
+  syntax("Syntax: " + syntax),
+  description(description)
+{
+}
+
+bool CommandDef::CheckArgs(const std::vector<std::string>& args) const
+{
+  int argsSize = static_cast<int>(args.size()) - 1;
+  return (argsSize >= minimumArgs &&
+          (maximumArgs == -1 || argsSize <= maximumArgs));
+}
+
+CommandPtr CommandDef::Create(ftp::Client& client, const std::string& argStr, const Args& args) const
+{
+  if (!creator) return nullptr;
+  return CommandPtr(creator->Create(client, argStr, args));
 }
 
 } /* site namespace */

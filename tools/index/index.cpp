@@ -1,13 +1,27 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <algorithm>
 #include <string>
 #include <vector>
 #include <iostream>
-#include <mongo/client/dbclient.h>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/regex.hpp>
-#include "cfg/config.hpp"
+#include "cfg/get.hpp"
 #include "cfg/error.hpp"
 #include "fs/owner.hpp"
 #include "util/path/status.hpp"
@@ -17,9 +31,10 @@
 #include "util/path/path.hpp"
 #include "util/misc.hpp"
 #include "util/enumbitwise.hpp"
+#include "db/connection.hpp"
 
 std::shared_ptr<cfg::Config> config;
-mongo::DBClientConnection conn;
+std::unique_ptr<db::FastConnection> conn;
 
 void DisplayHelp(char* argv0, boost::program_options::options_description& desc)
 {
@@ -114,21 +129,19 @@ std::string VirtualPath(std::string path)
 
 void AddPath(const std::string& path)
 {
-  static const auto globFlags = util::path::GlobIterator::IgnoreErrors |
-                                util::path::GlobIterator::Recursive;
-
+  std::cout << path << std::endl;
   std::string collection = config->Database().Name() + ".index";
   util::path::GlobIterator globEnd;
-  auto globIter = util::path::GlobIterator(path, globFlags);
+  auto globIter = util::path::GlobIterator(path, path.back() != '/');
   for (; globIter != globEnd; ++globIter)
   {
     if (!util::path::IsDirectory(*globIter)) continue;
     auto vpath = VirtualPath(*globIter);
     if (!vpath.empty())
     {
-      auto section = config->SectionMatch(vpath);
+      auto section = config->SectionMatch(vpath, true);
       auto obj = BSON("path" << vpath << "section" << (section ? section->Name() : ""));
-      conn.insert(collection, obj);
+      conn->BaseConn().insert(collection, obj);
     }
   }
 }
@@ -149,7 +162,7 @@ void DeletePath(const std::string& path)
   mongo::BSONObjBuilder bob;
   bob.appendRegex("$regex", regex);
   auto query = QUERY("path" << bob.obj());
-  auto cursor = conn.query(collection, query);
+  auto cursor = conn->BaseConn().query(collection, query);
   while (cursor->more())
   {
     auto obj = cursor->next();
@@ -170,7 +183,7 @@ void DeletePath(const std::string& path)
   for (const std::string& path : toDelete)
   {
     auto query = QUERY("path" << path);
-    conn.remove(collection, query);
+    conn->BaseConn().remove(collection, query);
   }
 }
 
@@ -184,7 +197,9 @@ std::vector<std::string> ConfigPaths()
   std::vector<std::string> paths;
   for (const std::string& path : config->Indexed())
   {
+    bool trailingSlash = path.back() == '/';
     paths.emplace_back(util::path::Append(config->Sitepath(), path));
+    if (trailingSlash) paths.back() += '/';
   }
   return paths;
 }
@@ -205,24 +220,16 @@ bool ValidatePaths(const std::vector<std::string>& paths)
 
 bool ConnectDatabase()
 {
-  const auto& dbConfig = config->Database();
   try
   {
-    conn.connect(dbConfig.Host());
-    if (!dbConfig.Login().empty())
-    {
-      std::string errmsg;
-      if (!conn.auth(dbConfig.Name(), dbConfig.Login(), dbConfig.Password(), errmsg))
-        throw mongo::DBException("Authentication failed", 0);
-    }
-    conn.setWriteConcern(mongo::W_NONE);
+    conn.reset(new db::FastConnection());
+    return true;
   }
-  catch (const mongo::DBException& e)
+  catch (const db::DBError& e)
   {
-    std::cerr << "Database connect failed: " << e.what() << std::endl;
+    std::cerr << e.what() << std::endl;
     return false;
   }
-  return true;
 }
 
 int main(int argc, char** argv)
@@ -236,12 +243,14 @@ int main(int argc, char** argv)
   try
   {
     config = cfg::Config::Load(configPath, true);
+    cfg::UpdateShared(config);
   }
   catch (const cfg::ConfigError& e)
   {
     std::cerr << "Failed to load config: " << e.Message() << std::endl;
     return 1;
   }
+  
   
   if (config->Indexed().empty())
   {
@@ -269,7 +278,7 @@ int main(int argc, char** argv)
   catch (const mongo::DBException& e)
   {
     std::cerr << "Error while communicating with database: " << e.what() << std::endl;
-    return 1;
+    _exit(1);
   }
-  return 0;
+  _exit(0); // used to work around a mongodb driver bug
 }

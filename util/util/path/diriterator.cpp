@@ -1,67 +1,143 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <cstring>
 #include <cassert>
+#include <boost/filesystem.hpp>
 #include "util/path/diriterator.hpp"
-#include "util/path/path.hpp"
+#include "util/error.hpp"
 
 namespace util { namespace path
 {
 
-DirIterator::DirIterator(const std::string& path, bool basenameOnly) :
-  path(path), dep(nullptr), basenameOnly(basenameOnly)
+namespace fs = boost::filesystem3;
+
+DirIterator::DirIterator() :
+  iter(new fs::directory_iterator())
 {
-  Opendir();
+}
+
+DirIterator::DirIterator(const std::string& path, ValueType valueType) :
+  path(path),
+  valueType(valueType)
+{
+  OpenDirectory();
 }
 
 DirIterator::DirIterator(const std::string& path, 
-    const std::function<bool(const std::string&)>& filter, bool basenameOnly) :
-  path(path), dep(nullptr), basenameOnly(basenameOnly), filter(filter)
+            const std::function<bool(const std::string&)>& filter,
+            ValueType valueType) :
+  path(path),
+  filter(filter),
+  valueType(valueType)
 {
-  Opendir();
-}
-
-void DirIterator::Opendir()
-{
-  DIR* dp = opendir(path.c_str());
-  if (!dp) throw util::SystemError(errno);
-  
-  this->dp.reset(dp, closedir);
-  current = NextEntry();
-}
-
-std::string DirIterator::NextEntry()
-{
-  std::string entry;
-  while (true)
+  OpenDirectory();
+  if (filter)
   {
-    if (readdir_r(dp.get(), &de, &dep) < 0)
-      throw util::SystemError(errno);
-    if (!dep) break;
-
-    if (!strcmp(de.d_name, ".") ||
-        !strcmp(de.d_name, "..") ||
-        (filter && !filter(util::path::Join(path, de.d_name))))
-        continue;
-    
-    if (!basenameOnly) entry = util::path::Join(path, de.d_name);
-    else entry = de.d_name;
-    break;
+    DirIterator end;
+    while (*this != end && filter(**this))
+    {
+      ++(*this);
+    }
   }
-  
-  return entry;
+}
+
+void DirIterator::OpenDirectory()
+{
+  try
+  {
+    iter.reset(new fs::directory_iterator(path));
+  }
+  catch (const fs::filesystem_error& e)
+  {
+    throw util::SystemError(e.code().value());
+  }
+}
+
+DirIterator::~DirIterator()
+{
+}  
+
+DirIterator& DirIterator::Rewind()
+{
+  OpenDirectory();
+  return *this;
+}
+
+bool DirIterator::operator==(const DirIteratorBase& rhs)
+{
+  assert(dynamic_cast<const DirIterator*>(&rhs));
+  return *this->iter == *reinterpret_cast<const DirIterator*>(&rhs)->iter;
+}
+
+bool DirIterator::operator!=(const DirIteratorBase& rhs)
+{
+  return !operator==(rhs);
 }
 
 DirIterator& DirIterator::operator++()
 {
-  current = NextEntry();
+  try
+  {
+    if (filter)
+    {
+      fs::directory_iterator end;
+      do
+      {
+        ++(*iter);
+      }
+      while (*iter != end && filter(**this));
+    }
+    else
+    {
+      ++(*iter);
+    }
+  }
+  catch (const fs::filesystem_error& e)
+  {
+    throw util::SystemError(e.code().value());
+  }
   return *this;
 }
 
-DirIterator& DirIterator::Rewind()
+std::string& DirIterator::Current() const
 {
-  rewinddir(dp.get());
-  NextEntry();
-  return *this;
+  switch (valueType)
+  {
+    case AbsolutePath :
+      current = (*iter)->path().string();
+      break;
+    case BasenameOnly :
+      current = (*iter)->path().filename().string();
+      break;
+    default           :
+      assert(false);
+  }
+  
+  return current;
 }
 
+const std::string& DirIterator::operator*() const
+{
+  return Current();
+}
+
+const std::string* DirIterator::operator->() const
+{
+  return &Current();
+}
+  
 } /* path namespace */
 } /* util namespace */

@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/regex.hpp>
 #include "acl/path.hpp"
@@ -231,12 +246,12 @@ public:
 };
 
 template <>
-struct Traits<Filemove>
+struct Traits<Move>
 {
 private:
   static util::Error AllowedOwner(const User& user, const fs::VirtualPath& path)
   {
-    if (Evaluate(cfg::Get().Filemoveown(), user, path))
+    if (Evaluate(cfg::Get().Moveown(), user, path))
       return util::Error::Success();
     else
       return util::Error::Failure(EACCES);
@@ -244,7 +259,7 @@ private:
 
   static util::Error AllowedOther(const User& user, const fs::VirtualPath& path)
   {
-    if (Evaluate(cfg::Get().Filemove(), user, path))
+    if (Evaluate(cfg::Get().Move(), user, path))
       return util::Error::Success();
     else
       return util::Error::Failure(EACCES);
@@ -440,7 +455,7 @@ template util::Error FileAllowed<Resume>(const User& user, const fs::VirtualPath
 template util::Error FileAllowed<Overwrite>(const User& user, const fs::VirtualPath& path);
 template util::Error FileAllowed<Download>(const User& user, const fs::VirtualPath& path);
 template util::Error FileAllowed<Rename>(const User& user, const fs::VirtualPath& path);
-template util::Error FileAllowed<Filemove>(const User& user, const fs::VirtualPath& path);
+template util::Error FileAllowed<Move>(const User& user, const fs::VirtualPath& path);
 template util::Error FileAllowed<Delete>(const User& user, const fs::VirtualPath& path);
 template util::Error FileAllowed<View>(const User& user, const fs::VirtualPath& path);
 template util::Error FileAllowed<Hideinwho>(const User& user, const fs::VirtualPath& path);
@@ -460,6 +475,7 @@ util::Error DirAllowed(const User& user, const fs::VirtualPath& path)
 }
 
 template util::Error DirAllowed<Makedir>(const User& user, const fs::VirtualPath& path);
+template util::Error DirAllowed<Move>(const User& user, const fs::VirtualPath& path);
 template util::Error DirAllowed<Rename>(const User& user, const fs::VirtualPath& path);
 template util::Error DirAllowed<Nuke>(const User& user, const fs::VirtualPath& path);
 template util::Error DirAllowed<Delete>(const User& user, const fs::VirtualPath& path);
@@ -477,6 +493,8 @@ util::Error Allowed(const User& user, const fs::VirtualPath& path)
 }
 
 template util::Error Allowed<View>(const User& user, const fs::VirtualPath& path);
+template util::Error Allowed<Rename>(const User& user, const fs::VirtualPath& path);
+template util::Error Allowed<Move>(const User& user, const fs::VirtualPath& path);
 
 util::Error Filter(const User& user, const fs::Path& basename)
 {

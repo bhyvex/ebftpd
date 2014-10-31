@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __FTP_CLIENTIMPL_HPP
 #define __FTP_CLIENTIMPL_HPP
 
@@ -30,6 +45,34 @@ namespace ftp
 {
 
 class Client;
+enum class CounterResult;
+
+class LoginGuard
+{
+  Client& client;
+  bool loggedIn;
+  boost::thread::id tid;
+  
+public:
+  LoginGuard(Client& client) : 
+    client(client), loggedIn(false)
+  {
+  }
+  
+  ~LoginGuard()
+  {
+    if (loggedIn) 
+    {
+      Logout();
+    }
+  }
+  
+  CounterResult Login(bool kicked, const boost::thread::id& tid);
+  void Logout();
+};
+
+
+class Client;
 
 class ClientImpl : public util::Thread
 {
@@ -40,11 +83,12 @@ class ClientImpl : public util::Thread
   ::ftp::Data data;
   util::ProcessReader child;
   
+  LoginGuard loginGuard;
   std::atomic<bool> userUpdated;
   boost::optional<acl::User> user;
   ::ftp::ClientState state;
   int passwordAttemps;
-  fs::VirtualPath renameFrom;
+  boost::optional<std::pair<fs::VirtualPath, std::string>> renameFrom;
   xdupe::Mode xdupeMode;
   std::string confirmCommand;
   std::string currentCommand;
@@ -92,8 +136,10 @@ public:
   void SetWaitingPassword(const acl::User& user, bool kickLogin);
   bool VerifyPassword(const std::string& password);
   bool PasswordAttemptsExceeded() const;
-  void SetRenameFrom(const fs::VirtualPath& path) { this->renameFrom = path; }
-  const fs::VirtualPath& RenameFrom() const { return renameFrom; }
+  void SetRenameFrom(const boost::optional<std::pair<fs::VirtualPath, std::string>>& from)
+  { this->renameFrom = from; }
+  const boost::optional<std::pair<fs::VirtualPath, std::string>>& RenameFrom() const
+  { return renameFrom; }
   
   bool KickLogin() const { return kickLogin; }
   

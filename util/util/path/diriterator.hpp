@@ -1,59 +1,47 @@
-#ifndef __UTIL_DIRITERATOR_HPP
-#define __UTIL_DIRITERATOR_HPP
+#ifndef __UTIL_PATH_DIRITERATOR_HPP
+#define __UTIL_PATH_DIRITERATOR_HPP
 
-#include <functional>
-#include <iostream>
 #include <iterator>
-#include <string>
-#include <dirent.h>
 #include <memory>
-#include "util/error.hpp"
+#include <functional>
+#include "util/path/diriteratorbase.hpp"
 
-namespace acl
+namespace boost { namespace filesystem3
 {
-class User;
+class directory_iterator;
+}
 }
 
 namespace util { namespace path
 {
 
-class DirIterator : 
-  public std::iterator<std::forward_iterator_tag, std::string>
+class DirIterator : public DirIteratorBase
 {
+public:
+  enum ValueType { AbsolutePath, BasenameOnly };
+  
+private:
   std::string path;
-  struct dirent de;
-  struct dirent *dep;
-  std::shared_ptr<DIR> dp;
-  bool basenameOnly;
-  
-  void Opendir();
-  
-protected:
+  mutable std::string current;
   std::function<bool(const std::string&)> filter;
-  std::string current;
+  std::shared_ptr<boost::filesystem3::directory_iterator> iter;
+  ValueType valueType;
 
-  virtual std::string NextEntry();
+  void OpenDirectory();
+  std::string& Current() const;
   
 public:
-  DirIterator() : dep(nullptr) { }
-  explicit DirIterator(const std::string& path, bool basenameOnly = true);
-  explicit DirIterator(const std::string& path, 
-                       const std::function<bool(const std::string&)>& filter, 
-                       bool basenameOnly = true);
-  
-  virtual ~DirIterator() { }
-  
-  virtual DirIterator& Rewind();
-
-  virtual bool operator==(const DirIterator& rhs)
-  { return dep == rhs.dep; }
-  
-  virtual bool operator!=(const DirIterator& rhs)
-  { return !operator==(rhs); }
-  
+  DirIterator();
+  DirIterator(const std::string& path, ValueType valueType = BasenameOnly);
+  DirIterator(const std::string& path, const std::function<bool(const std::string&)>& filter, 
+              ValueType valueType = BasenameOnly);
+  ~DirIterator();
+  DirIterator& Rewind();
+  bool operator==(const DirIteratorBase& rhs);
+  bool operator!=(const DirIteratorBase& rhs);
   DirIterator& operator++();
-  const std::string& operator*() const { return current; }
-  const std::string* operator->() const { return &current; }
+  const std::string& operator*() const;
+  const std::string* operator->() const;
 };
 
 } /* path namespace */

@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <pthread.h>
 #include <csignal>
 #include <cstring>
@@ -39,6 +54,7 @@ std::atomic_bool ClientImpl::siteopOnly(false);
 ClientImpl::ClientImpl(Client& parent) :
   parent(parent),
   data(parent), 
+  loginGuard(parent),
   userUpdated(false),
   state(ClientState::LoggedOut),
   passwordAttemps(0),
@@ -68,21 +84,19 @@ void ClientImpl::SetState(ClientState state)
 
   if (logout)
   {
-    Counter::Login().Stop(user->ID());
+    loginGuard.Logout();
     logs::Event("LOGOUT", logs::QuoteOff(), 
                 "ident_address", Ident(LogAddresses::Normal) + "@" + Hostname(LogAddresses::Normal), 
                 "ip", logs::Brackets('(', ')'), IP(LogAddresses::Normal), 
                  logs::QuoteOn(), "user", user->Name(), 
                 "group", user->PrimaryGroup(), 
                 "tagline", user->Tagline());
-    OnlineWriter::Get().LoggedOut(boost::this_thread::get_id());
   }
 }
 
 void ClientImpl::SetLoggedIn(bool kicked)
 {
-  auto result = Counter::Login().Start(user->ID(), user->NumLogins(), kicked, 
-                                       user->HasFlag(acl::Flag::Exempt));
+  auto result = loginGuard.Login(kicked, boost::this_thread::get_id());
   switch (result)
   {
     case CounterResult::PersonalFail  :
@@ -116,8 +130,6 @@ void ClientImpl::SetLoggedIn(bool kicked)
               logs::QuoteOn(), "user", user->Name(), 
               "group", user->PrimaryGroup(), 
               "tagline", user->Tagline());
-              
-  OnlineWriter::Get().LoggedIn(boost::this_thread::get_id(), parent, fs::WorkDirectory().ToString());
 }
 
 void ClientImpl::SetWaitingPassword(const acl::User& user, bool kickLogin)
@@ -554,6 +566,7 @@ void ClientImpl::InnerRun()
 void ClientImpl::Run()
 {
   util::SetProcessTitle("CLIENT");
+  logs::SetThreadIDPrefix('C' /* client */);
   
   auto finishedGuard = util::MakeScopeExit([&]
   {
@@ -580,7 +593,7 @@ void ClientImpl::Run()
   {
     logs::Debug("Client from %1% lost connection: %2%", control.RemoteEndpoint(), e.Message());
   }
-  catch (const std::exception& e)
+/*  catch (const std::exception& e)
   {
     logs::Error("Unhandled error on client thread: %1%", e.what());
   }
@@ -588,9 +601,30 @@ void ClientImpl::Run()
   {
     throw;
     logs::Error("Unhandled error on client thread: Not descended from std::exception");
-  }
+  }*/
   
   (void) finishedGuard; /* silence unused variable warning */
+}
+
+CounterResult LoginGuard::Login(bool kicked, const boost::thread::id& tid)
+{
+  auto result = Counter::Login().Start(client.User().ID(), client.User().NumLogins(), 
+                                       kicked, client.User().HasFlag(acl::Flag::Exempt));
+  if (result != CounterResult::Okay) return result;
+
+  OnlineWriter::Get().LoggedIn(tid, client, fs::WorkDirectory().ToString());
+  
+  this->tid = tid;
+  loggedIn = true;
+  return CounterResult::Okay;
+}
+
+void LoginGuard::Logout()
+{
+  assert(loggedIn);
+  Counter::Login().Stop(client.User().ID());
+  OnlineWriter::Get().LoggedOut(tid);  
+  loggedIn = false;
 }
 
 } /* ftp namespace */

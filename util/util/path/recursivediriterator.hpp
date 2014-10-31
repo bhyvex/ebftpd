@@ -1,66 +1,40 @@
-#ifndef __UTIL_PATH_RECURSIVE_DIRITERATOR_HPP
-#define __UTIL_PATH_RECURSIVE_DIRITERATOR_HPP
+#ifndef __UTIL_PATH_RECURSIVEDIRITERATOR_HPP
+#define __UTIL_PATH_RECURSIVEDIRITERATOR_HPP
 
-#include <boost/optional.hpp>
-#include "util/path/diriterator.hpp"
-#include "util/path/status.hpp"
+#include <iterator>
+#include <memory>
+#include <functional>
+#include "util/path/diriteratorbase.hpp"
+
+namespace boost { namespace filesystem3
+{
+class recursive_directory_iterator;
+}
+}
 
 namespace util { namespace path
 {
 
-class RecursiveDirIterator;
-
-class RecursiveDirIterator : public DirIterator
+class RecursiveDirIterator : public DirIteratorBase
 {
-  std::shared_ptr<RecursiveDirIterator> subIt;
-  std::shared_ptr<RecursiveDirIterator> subEnd;
-  bool ignoreErrors;
-  
-  std::string NextEntry();
+  std::string path;
+  mutable std::string current;
+  std::function<bool(const std::string&)> filter;
+  std::shared_ptr<boost::filesystem3::recursive_directory_iterator> iter;
+
+  void OpenDirectory();
   
 public:
-  RecursiveDirIterator() = default;
-  explicit RecursiveDirIterator(const std::string& path, bool ignoreErrors = false) : 
-    DirIterator(path, false), ignoreErrors(ignoreErrors)
-  { }
-
-  explicit RecursiveDirIterator(const std::string& path, 
-        const std::function<bool(const std::string&)>& filter, bool ignoreErrors = false) : 
-    DirIterator(path, filter, false), ignoreErrors(ignoreErrors)
-  { }
-  
-
-  RecursiveDirIterator& Rewind()
-  {
-    subIt = nullptr;
-    DirIterator::Rewind();
-    return *this;
-  }
-  
-  bool operator==(const RecursiveDirIterator& rhs)
-  {
-    if (subIt)
-    {
-      if (!rhs.subIt)
-      {
-        return false;
-      }
-      
-      if (*subIt != *rhs.subIt)
-      {
-        return false;
-      }
-    }
-    else
-    if (rhs.subIt)
-    {
-      return false;
-    }
-    return DirIterator::operator==(rhs);
-  }
-  
-  bool operator!=(const RecursiveDirIterator& rhs)
-  { return !operator==(rhs); }
+  RecursiveDirIterator();
+  RecursiveDirIterator(const std::string& path);
+  RecursiveDirIterator(const std::string& path, const std::function<bool(const std::string&)>& filter);
+  ~RecursiveDirIterator();
+  RecursiveDirIterator& Rewind();
+  bool operator==(const DirIteratorBase& rhs);
+  bool operator!=(const DirIteratorBase& rhs);
+  RecursiveDirIterator& operator++();
+  const std::string& operator*() const;
+  const std::string* operator->() const;
 };
 
 } /* path namespace */

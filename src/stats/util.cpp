@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <sstream>
 #include <iomanip>
 #include <boost/optional.hpp>
@@ -75,42 +90,42 @@ std::string HighResSecondsString(const boost::posix_time::ptime& start,
   return HighResSecondsString(end - start);
 }
 
-int UploadRatio(const ftp::Client& client, const fs::VirtualPath& path, 
+int UploadRatio(const acl::User& user, const fs::VirtualPath& path, 
     const boost::optional<const cfg::Section&>& section)
 {
   if (section)
   {
-    int ratio = client.User().SectionRatio(section->Name());
+    int ratio = user.SectionRatio(section->Name());
     if (ratio >= 0) return ratio;
   }
   
-  auto cc = acl::CreditCheck(client.User(), path);
+  auto cc = acl::CreditCheck(user, path);
   if (cc && cc->Ratio() >= 0) return cc->Ratio();
   
   if (section &&  section->Ratio() >= 0) return section->Ratio();
   
-  assert(client.User().DefaultRatio() >= 0);
-  return client.User().DefaultRatio();
+  assert(user.DefaultRatio() >= 0);
+  return user.DefaultRatio();
 }
 
-int DownloadRatio(const ftp::Client& client, const fs::VirtualPath& path, 
+int DownloadRatio(const acl::User& user, const fs::VirtualPath& path, 
     const boost::optional<const cfg::Section&>& section)
 {
-  if (acl::path::FileAllowed<acl::path::Freefile>(client.User(), path)) return 0;
+  if (acl::path::FileAllowed<acl::path::Freefile>(user, path)) return 0;
   
   if (section)
   {
-    int ratio = client.User().SectionRatio(section->Name());
+    int ratio = user.SectionRatio(section->Name());
     if (ratio == 0) return 0;
   }
   
-  auto cl = acl::CreditLoss(client.User(), path);
+  auto cl = acl::CreditLoss(user, path);
   if (cl && cl->Ratio() >= 0) return cl->Ratio();
   
   if (section &&  section->Ratio() >= 0) return section->Ratio();
   
-  assert(client.User().DefaultRatio() >= 0);
-  return client.User().DefaultRatio() == 0 ? 0 : 1;
+  assert(user.DefaultRatio() >= 0);
+  return user.DefaultRatio() == 0 ? 0 : 1;
 }
 
 } /* stats namespace */

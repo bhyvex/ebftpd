@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #ifndef __CFG_CONFIG_CPP
 #define __CFG_CONFIG_CPP
 
@@ -17,7 +32,6 @@
 namespace cfg
 {
 
-enum class WeekStart { Sunday, Monday };
 enum class EPSVFxp { Allow, Deny, Force };
 enum class LogAddresses { Never, Errors, Always };
 
@@ -94,8 +108,8 @@ class Config
   std::vector< ::cfg::Right> resumeown;
   std::vector< ::cfg::Right> rename;
   std::vector< ::cfg::Right> renameown;
-  std::vector< ::cfg::Right> filemove;
-  std::vector< ::cfg::Right> filemoveown;
+  std::vector< ::cfg::Right> move;
+  std::vector< ::cfg::Right> moveown;
   std::vector< ::cfg::Right> makedir;
   std::vector< ::cfg::Right> upload;
   std::vector< ::cfg::Right> download;
@@ -126,18 +140,16 @@ class Config
   ::cfg::Lslong lslong;
   std::vector< ::cfg::HiddenFiles> hiddenFiles;
   std::vector<std::string> noretrieve;
-  int multiplierMax;
-  long long emptyNuke;
+  ::cfg::NukeMax nukeMax;
   std::vector< ::cfg::Creditcheck> creditcheck;
   std::vector< ::cfg::Creditloss> creditloss;
-  ::cfg::NukedirStyle nukedirStyle;
+  ::cfg::NukeStyle nukedirStyle;
   std::vector< ::cfg::Msgpath> msgpath;
   std::vector< ::cfg::Privpath> privpath;
   std::vector< ::cfg::SiteCmd> siteCmd;
   int maxSitecmdLines;
   ::cfg::IdleTimeout idleTimeout;
   ::cfg::Database database;
-  ::cfg::WeekStart weekStart;
   std::vector<CheckScript> preCheck;
   std::vector<CheckScript> preDirCheck;
   std::vector<CheckScript> postCheck;
@@ -151,7 +163,9 @@ class Config
   bool dnsLookup;
   ::cfg::LogAddresses logAddresses;
   mode_t umask;
-  int defaultLogLines;
+  int logLines;
+  ssize_t dataBufferSize;
+  std::string natAddr;
   
   acl::ACL tlsControl;
   acl::ACL tlsListing;
@@ -240,8 +254,8 @@ public:
   const std::vector< ::cfg::Right>& Resumeown() const { return resumeown; } 
   const std::vector< ::cfg::Right>& Rename() const { return rename; } 
   const std::vector< ::cfg::Right>& Renameown() const { return renameown; } 
-  const std::vector< ::cfg::Right>& Filemove() const { return filemove; } 
-  const std::vector< ::cfg::Right>& Filemoveown() const { return filemoveown; } 
+  const std::vector< ::cfg::Right>& Move() const { return move; } 
+  const std::vector< ::cfg::Right>& Moveown() const { return moveown; } 
   const std::vector< ::cfg::Right>& Makedir() const { return makedir; } 
   const std::vector< ::cfg::Right>& Upload() const { return upload; } 
   const std::vector< ::cfg::Right>& Download() const { return download; } 
@@ -272,22 +286,20 @@ public:
   const ::cfg::Lslong& Lslong() const { return lslong; }
   const std::vector< ::cfg::HiddenFiles>& HiddenFiles() const { return hiddenFiles; }
   const std::vector<std::string>& Noretrieve() const { return noretrieve; }
-  int MultiplierMax() const { return multiplierMax; }
-  long long EmptyNuke() const { return emptyNuke; }
+  const ::cfg::NukeMax& NukeMax() const { return nukeMax; }
   const std::vector< ::cfg::Creditcheck>& Creditcheck() const { return creditcheck; }
   const std::vector< ::cfg::Creditloss>& Creditloss() const { return creditloss; }
-  const ::cfg::NukedirStyle& Nukedirtyle() const { return nukedirStyle; }
+  const ::cfg::NukeStyle& NukeStyle() const { return nukedirStyle; }
   const std::vector< ::cfg::Msgpath>& Msgpath() const { return msgpath; }
   const std::vector< ::cfg::Privpath>& Privpath() const { return privpath; }
   const std::vector< ::cfg::SiteCmd>& SiteCmd() const { return siteCmd; }
   int MaxSitecmdLines() const { return maxSitecmdLines; }
   const ::cfg::IdleTimeout& IdleTimeout() const { return idleTimeout; }
-  ::cfg::WeekStart WeekStart() const { return weekStart; }
   const std::vector<CheckScript>& PreCheck() const { return preCheck; }
   const std::vector<CheckScript>& PreDirCheck() const { return preDirCheck; }
   const std::vector<CheckScript>& PostCheck() const { return postCheck; }  
   const std::map<std::string, Section>& Sections() const { return sections; }
-  boost::optional<const Section&> SectionMatch(const std::string& path) const;
+  boost::optional<const Section&> SectionMatch(std::string path, bool isDir = false) const;
   ::cfg::EPSVFxp EPSVFxp() const { return epsvFxp; }
   int MaximumRatio() const { return maximumRatio; }
   const acl::ACL& TLSControl() const { return tlsControl; }
@@ -300,8 +312,10 @@ public:
   bool DNSLookup() const { return dnsLookup; }
   ::cfg::LogAddresses LogAddresses() const { return logAddresses; }
   mode_t Umask() const { return umask; }
-  int DefaultLogLines() const { return defaultLogLines; }
-
+  int LogLines() const { return logLines; }
+  size_t DataBufferSize() const { return dataBufferSize; }
+  const std::string& NATAddr() const { return natAddr; }
+  
   const acl::ACL& CommandACL(const std::string& keyword) const
   { return commandACLs.at(keyword); }
   

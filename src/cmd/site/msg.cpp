@@ -1,8 +1,22 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <cctype>
 #include <algorithm>
 #include <map>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/lexical_cast.hpp>
 #include "cmd/site/msg.hpp"
 #include "logs/logs.hpp"
 #include "db/mail/mail.hpp"
@@ -59,14 +73,14 @@ void MSGCommand::Read()
   {
     try
     {
-      index = boost::lexical_cast<int>(args[2]);
+      index = util::StrToInt(args[2]);
       if (index < 1)
       {
         control.Reply(ftp::ActionNotOkay, "Index must be 1 or larger.");
         return;
       }
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     { throw cmd::SyntaxError(); }
   }
   
@@ -189,9 +203,9 @@ void MSGCommand::Save()
   int index;
   try
   {
-    index = boost::lexical_cast<int>(args[2]);
+    index = util::StrToInt(args[2]);
   }
-  catch (const boost::bad_lexical_cast&)
+  catch (const std::bad_cast&)
   {
     throw cmd::SyntaxError();
   }
@@ -217,9 +231,9 @@ void MSGCommand::Purge()
   int index;
   try
   {
-    index = boost::lexical_cast<int>(args[2]);
+    index = util::StrToInt(args[2]);
   }
-  catch (const boost::bad_lexical_cast&)
+  catch (const std::bad_cast&)
   {
     throw cmd::SyntaxError();
   }
@@ -266,7 +280,7 @@ void MSGCommand::List()
     body.RegisterValue("index", ++index);
     body.RegisterValue("sender", message.Sender());
     body.RegisterValue("status", util::ToUpperCopy(util::EnumToString(message.Status())));
-    body.RegisterValue("when", boost::lexical_cast<std::string>(message.TimeSent()));
+    body.RegisterValue("when", boost::posix_time::to_simple_string(message.TimeSent()));
     body.RegisterValue("body", message.Body());
     
     os << body.Compile();

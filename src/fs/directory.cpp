@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <sys/stat.h>
 #include <cerrno>
 #include <cassert>
@@ -151,8 +166,7 @@ util::Error RemoveDirectory(const acl::User& user, const VirtualPath& path)
       if (name[0] !=  '.') return util::Error::Failure(ENOTEMPTY);
         
       util::path::Status status((MakeReal(path) / name).ToString());
-      if (status.IsDirectory() ||
-          !status.IsWriteable())
+      if (status.IsDirectory() || !status.IsWriteable())
         return util::Error::Failure(ENOTEMPTY);
     }
     
@@ -180,19 +194,7 @@ util::Error RenameDirectory(const RealPath& oldPath, const RealPath& newPath)
   return util::Error::Success();
 }
 
-util::Error RenameDirectory(const acl::User& user, const VirtualPath& oldPath,
-                 const VirtualPath& newPath)                 
-{
-  util::Error e = PP::DirAllowed<PP::Rename>(user, oldPath);
-  if (!e) return e;
-
-  e = PP::DirAllowed<PP::Makedir>(user, newPath);
-  if (!e) return e;
-  
-  return RenameDirectory(MakeReal(oldPath), MakeReal(newPath));
-}
-
-util::Error DirectorySize(const RealPath& path, int depth, long long& kBytes)
+util::Error DirectorySize(const RealPath& path, int depth, long long& kBytes, bool ignoreHidden)
 {
   kBytes = 0;
   if (depth < 0) return util::Error::Failure(EINVAL);
@@ -202,6 +204,7 @@ util::Error DirectorySize(const RealPath& path, int depth, long long& kBytes)
   {
     for (auto& entry : util::path::DirContainer(path.ToString()))
     {
+      if (ignoreHidden && entry[0] == '.') continue;
       try
       {
         auto entryPath = path / entry;
@@ -211,7 +214,7 @@ util::Error DirectorySize(const RealPath& path, int depth, long long& kBytes)
           if (!status.IsSymLink())
           {
             long long subKBytes;
-            if (DirectorySize(entryPath, depth - 1, subKBytes))
+            if (DirectorySize(entryPath, depth - 1, subKBytes, ignoreHidden))
               kBytes += subKBytes;
           }
         }
@@ -222,7 +225,7 @@ util::Error DirectorySize(const RealPath& path, int depth, long long& kBytes)
         }
       }
       catch (const util::SystemError& e)
-      { std::cout << (path / entry) << " " << e.Message() << std::endl; }
+      { }
     }
   }
   catch (const util::SystemError& e)

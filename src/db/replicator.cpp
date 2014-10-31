@@ -1,4 +1,18 @@
-#include <mongo/client/dbclient.h>
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <boost/optional.hpp>
 #include <list>
 #include <csignal>
@@ -8,6 +22,7 @@
 #include "db/error.hpp"
 #include "util/verify.hpp"
 #include "util/misc.hpp"
+#include "db/connection.hpp"
 
 namespace db
 {
@@ -20,7 +35,7 @@ class Tail
   std::string ns;
   mongo::BSONObj lastObj;
   boost::optional<mongo::BSONElement> lastOID;
-  mongo::DBClientConnection& conn;
+  mongo::DBClientBase& conn;
   std::auto_ptr<mongo::DBClientCursor> cursor;
   
   void SetLastOID(const mongo::BSONObj& obj)
@@ -39,7 +54,7 @@ class Tail
   }
   
 public:
-  Tail(const std::string& ns, mongo::DBClientConnection& conn) : 
+  Tail(const std::string& ns, mongo::DBClientBase& conn) : 
     ns(ns), conn(conn)
   {
     InitialiseLastOID();
@@ -140,47 +155,36 @@ void Replicator::Populate()
 
 void Replicator::Run()
 {
-  util::SetProcessTitle("DB REPLICATOR");
-  mongo::DBClientConnection conn;
+  util::SetProcessTitle("REPLICATOR");
+  logs::SetThreadIDPrefix('R' /* replicator */);
+
   while (true)
   {
-    const auto& dbConfig = cfg::Get().Database();
     try
     {
-      conn.connect(dbConfig.Host());
-      if (dbConfig.NeedAuth())
+      SafeConnection conn;    
+      Populate();
+
+      try
       {
-        std::string errmsg;
-        if (!conn.auth(dbConfig.Name(), dbConfig.Login(), dbConfig.Password(), errmsg))
+        Tail tail(cfg::Get().Database().Name() + ".updatelog", conn.BaseConn());
+        while (true)
         {
-          throw mongo::DBException(errmsg, 0);
+          auto entry = tail.Next();
+          Replicate(entry);
         }
       }
-    }
-    catch (const mongo::DBException& e)
-    {
-      static const long connectRetryInterval = 15;
-      LogException("Connect", e);
-      boost::this_thread::sleep(boost::posix_time::seconds(connectRetryInterval));
-      continue;
-    }
-    
-    Populate();
-
-    try
-    {
-      Tail tail(dbConfig.Name() + ".updatelog", conn);
-      while (true)
+      catch (const mongo::DBException& e)
       {
-        auto entry = tail.Next();
-        Replicate(entry);
-      }
+        LogException("Replication", e);
+      }      
     }
-    catch (const mongo::DBException& e)
+    catch (const DBError&)
     {
-      LogException("Replication", e);
-      boost::this_thread::sleep(boost::posix_time::milliseconds(100));
+      // failed connection
     }
+
+    boost::this_thread::sleep(boost::posix_time::seconds(retryInterval));
   }
 }
 

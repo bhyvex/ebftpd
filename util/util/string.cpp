@@ -1,4 +1,22 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#include <iomanip>
+
 #include <cctype>
+#include <sstream>
 #include <fnmatch.h>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/classification.hpp>
@@ -15,7 +33,7 @@ bool BoolLexicalCast(std::string arg)
   boost::to_lower(arg);
   if (arg == "yes") return true;
   else if (arg == "no") return false;
-  return boost::lexical_cast<bool>(arg);
+  throw std::bad_cast();
 }
 
 bool WildcardMatch(const char* pattern, const std::string& str, bool iCase)
@@ -225,6 +243,135 @@ bool StartsWith(const std::string& s, const std::string& test)
 bool EndsWith(const std::string&s, const std::string& test)
 {
   return boost::ends_with(s, test);
+}
+
+double StrToDouble(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    double value = std::stod(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+float StrToFloat(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    float value = std::stof(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+int StrToInt(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    int value = std::stoi(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+long StrToLong(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    long value = std::stol(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+long double StrToLDouble(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    long double value = std::stold(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+long long StrToLLong(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    long long value = std::stoll(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+unsigned long StrToULong(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    unsigned long value = std::stoul(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+unsigned long long StrToULLong(const std::string& s)
+{
+  try
+  {
+    size_t pos;
+    unsigned long long value = std::stoull(s, &pos);
+    if (pos != s.length()) throw std::bad_cast();
+    return value;
+  }
+  catch (const std::logic_error&)
+  {
+    throw std::bad_cast();
+  }
+}
+
+std::string ToString(long double v, int precision, bool fixed)
+{
+  std::ostringstream os;
+  if (precision >= 0) os << std::setprecision(precision);
+  if (fixed) os << std::fixed;
+  os << v;
+  return os.str();
 }
 
 } /* util namespace */

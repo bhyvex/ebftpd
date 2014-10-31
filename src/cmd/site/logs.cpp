@@ -1,5 +1,19 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <stack>
-#include <boost/lexical_cast.hpp>
 #include "cmd/site/logs.hpp"
 #include "logs/logs.hpp"
 #include "util/reverselogreader.hpp"
@@ -12,7 +26,7 @@ namespace cmd { namespace site
 
 LOGSCommand::LOGSCommand(ftp::Client& client, const std::string& argStr, const Args& args) :
   Command(client, client.Control(), client.Data(), argStr, args),
-  number(cfg::Get().DefaultLogLines())
+  number(cfg::Get().LogLines())
 {
 }
 
@@ -25,9 +39,9 @@ bool LOGSCommand::ParseArgs()
     if (args.size() < 4) return false;
     try
     {
-      number = boost::lexical_cast<int>(args[n + 1]);
+      number = util::StrToInt(args[n + 1]);
     }
-    catch (const boost::bad_lexical_cast&)
+    catch (const std::bad_cast&)
     { return false; }
     if (number <= 0) return false;
     n += 2;

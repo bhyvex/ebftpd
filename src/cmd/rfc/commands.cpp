@@ -1,7 +1,21 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <iomanip>
 #include <sstream>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/lexical_cast.hpp>
 #include <utime.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -12,7 +26,7 @@
 #include "acl/path.hpp"
 #include "acl/user.hpp"
 #include "cfg/get.hpp"
-#include "cmd/dirlist.hpp"
+#include "cmd/rfc/dirlist.hpp"
 #include "cmd/error.hpp"
 #include "cmd/site/factory.hpp"
 #include "cmd/util.hpp"
@@ -127,13 +141,12 @@ void DELECommand::Execute()
 
   if (loseCredits)
   {
-    long long creditLoss = bytes / 1024 * stats::UploadRatio(client, path, section);
+    long long creditLoss = bytes / 1024 * stats::UploadRatio(client.User(), path, section);
     if (creditLoss)
     {
       client.User().DecrSectionCredits(section && section->SeparateCredits() ? section->Name() : "", creditLoss);
       std::ostringstream os;
-      os << "DELE command successful. (" << std::fixed << std::setprecision(2) 
-         << creditLoss / 1024.0 << "MB credits lost)";
+      os << "DELE command successful. (" << util::ToString(creditLoss / 1024.0, 2) << "MB credits lost)";
       control.Reply(ftp::FileActionOkay, os.str()); 
       return;
     }
@@ -280,74 +293,6 @@ void HELPCommand::Execute()
   return;
 }
 
-void LISTCommand::Execute()
-{
-  std::ostringstream os;
-  os << "Opening connection for directory listing";
-  if (data.Protection()) os << " using TLS/SSL";
-  os << ".";
-  control.Reply(ftp::TransferStatusOkay, os.str());
-
-  try
-  {
-    data.Open(ftp::TransferType::List);
-  }
-  catch (const util::net::NetworkError&e )
-  {
-    control.Reply(ftp::CantOpenDataConnection,
-                 "Unable to open data connection: " + e.Message());
-    return;
-  }
-  if (!data.ProtectionOkay())
-  {
-    data.Close();
-    control.Reply(ftp::ProtocolNotSupported, 
-                  "TLS is enforced on directory listings.");
-    return;
-  }
-
-  std::string options;
-  fs::Path path;
-  if (args.size() >= 2)
-  {
-    std::string::size_type optOffset = 0;
-    if (args[1][0] == '-')
-    {
-      options = args[1].substr(1);
-      optOffset += args[1].length();
-    }
-    
-    path = fs::Path(util::TrimCopy(std::string(argStr, optOffset)));
-  }
-  
-  const cfg::Config& config = cfg::Get();
-  std::string forcedOptions(nlst ? "" : "l" + config.Lslong().Options());
-  
-  DirectoryList dirList(client, data, path, ListOptions(options, forcedOptions),
-                        config.Lslong().MaxRecursion());
-
-  try
-  {
-    dirList.Execute();    
-  }
-  catch (const util::net::NetworkError& e)
-  {
-    data.Close();
-    control.Reply(ftp::DataCloseAborted,
-                "Error whiling writing to data connection: " + e.Message());
-    return;
-  }
-  
-  data.Close();
-  control.Reply(ftp::DataClosedOkay, "End of directory listing (" + 
-      stats::HighResSecondsString(data.State().StartTime(), data.State().EndTime()) + ")"); 
-}
-
-void LISTCommand::ExecuteNLST()
-{
-  nlst = true;
-  Execute();
-}
 
 void LPRTCommand::Execute()
 {
@@ -502,16 +447,13 @@ void MKDCommand::Execute()
   
   const cfg::Config& config = cfg::Get();
   
-  if (config.IsIndexed(path.ToString()))
+  bool indexed = config.IsIndexed(path.ToString());
+  bool dupeLogged = config.IsDupeLogged(path.ToString());
+  if (indexed | dupeLogged)
   {
-    auto section = config.SectionMatch(path.ToString());
-    db::index::Add(path.ToString(), section ? section->Name() : "");
-  }
-  
-  if (config.IsDupeLogged(path.ToString()))
-  {
-    auto section = config.SectionMatch(path.ToString());
-    db::dupe::Add(path.Basename().ToString(), section ? section->Name() : "");    
+    auto section = config.SectionMatch(path.ToString(), true);
+    if (indexed) db::index::Add(path.ToString(), section ? section->Name() : "");
+    if (dupeLogged) db::dupe::Add(path.Basename().ToString(), section ? section->Name() : "");    
   }
   
   if (config.IsEventLogged(path.ToString()))
@@ -545,10 +487,6 @@ void MODECommand::Execute()
 
 
 
-void NLSTCommand::Execute()
-{
-  LISTCommand(client, argStr, args).ExecuteNLST();
-}
 
 
 
@@ -679,10 +617,10 @@ void RESTCommand::Execute()
   
   try
   {
-    restart = boost::lexical_cast<int>(args[1]);
-    if (restart < 0) throw boost::bad_lexical_cast();
+    restart = util::StrToInt(args[1]);
+    if (restart < 0) throw std::bad_cast();
   }
-  catch (const boost::bad_lexical_cast&)
+  catch (const std::bad_cast&)
   {
     control.Reply(ftp::InvalidRESTParameter, "Invalid parameter, restart offset set to 0.");
     data.SetRestartOffset(0);
@@ -725,74 +663,112 @@ void RNFRCommand::Execute()
 {
   fs::VirtualPath path(fs::PathFromUser(argStr));
   
-  util::Error e(acl::path::FileAllowed<acl::path::View>(client.User(), path));
+  util::Error e(acl::path::Allowed<acl::path::Rename>(client.User(), path));
   if (!e)
   {
-    control.Reply(ftp::ActionNotOkay, argStr + ": " + e.Message());
-    throw cmd::NoPostScriptError();
-  }
-
-  try
-  {
-    util::path::Status status(path.ToString());
-  }
-  catch (const util::SystemError& e)
-  {
-    control.Reply(ftp::ActionNotOkay, argStr + ": " + e.Message());
-    throw cmd::NoPostScriptError();
-  }
-  
-  client.SetRenameFrom(path);
-  control.Reply(ftp::PendingMoreInfo, "File exists, ready for destination name."); 
-}
-
-void RNTOCommand::Execute()
-{
-  fs::VirtualPath path(fs::PathFromUser(argStr));
-
-  util::Error e(acl::path::Filter(client.User(), path.Basename()));
-  if (!e)
-  {
-    control.Reply(ftp::ActionNotOkay, "Path name contains one or more invalid characters.");
-    throw cmd::NoPostScriptError();
-  }
-
-  bool isDirectory;
-  try
-  {
-    isDirectory = util::path::Status(client.RenameFrom().ToString()).IsDirectory();
-    if (isDirectory)
-      e = fs::RenameDirectory(client.User(), client.RenameFrom(), path);
-    else
-      e = fs::RenameFile(client.User(), client.RenameFrom(), path);    
-      
-    if (!e)
+    if (e.Errno() != EACCES  ||
+        !acl::path::Allowed<acl::path::Move>(client.User(), path))
     {
       control.Reply(ftp::ActionNotOkay, argStr + ": " + e.Message());
       throw cmd::NoPostScriptError();
     }
   }
-  catch (const util::SystemError& e)
+  
+  client.SetRenameFrom(std::make_pair(path, argStr));
+  control.Reply(ftp::PendingMoreInfo, "File exists, ready for destination name."); 
+}
+
+void RNTOCommand::Execute()
+{
+  namespace PP = acl::path;
+
+  if (!client.RenameFrom())
   {
-    control.Reply(ftp::ActionNotOkay, argStr + ": " + e.Message());
+    control.Reply(ftp::BadCommandSequence, "Invalid command sequence.");
     throw cmd::NoPostScriptError();
   }
+  
+  auto fromArgStr = client.RenameFrom()->second;
+  auto oldPath = client.RenameFrom()->first;
+  client.SetRenameFrom(boost::none);
 
-  if (isDirectory)
+  fs::VirtualPath newPath(fs::PathFromUser(argStr));
+
+  util::Error e(acl::path::Filter(client.User(), newPath.Basename()));
+  if (!e)
   {
-    // this should be changed to a single move action so as to retain the
-    // creation date in the database
-    if (cfg::Get().IsIndexed(client.RenameFrom().ToString()))
-      db::index::Delete(client.RenameFrom().ToString());
-
-    if (cfg::Get().IsIndexed(path.ToString()))
+    control.Reply(ftp::ActionNotOkay, "Path name contains one or more invalid characters.");
+    throw cmd::NoPostScriptError();
+  }
+  
+  if (oldPath.Dirname() != newPath.Dirname()) // this is move
+  {
+    e = PP::Allowed<PP::Move>(client.User(), oldPath);
+    if (!e)
     {
-      auto section = cfg::Get().SectionMatch(path.ToString());
-      db::index::Add(path.ToString(), section ? section->Name() : "");
+      control.Reply(ftp::ActionNotOkay, fromArgStr + ": " + e.Message());
+      throw cmd::NoPostScriptError();
     }
   }
   
-  control.Reply(ftp::FileActionOkay, "RNTO command successful.");
+  if (oldPath.Basename() != newPath.Basename()) // this is rename
+  {
+    e = PP::Allowed<PP::Rename>(client.User(), oldPath);
+    if (!e)
+    {
+      control.Reply(ftp::ActionNotOkay, fromArgStr + ": " + e.Message());
+      throw cmd::NoPostScriptError();
+    }
+  }
+  
+  try
+  {
+    bool isDirectory = util::path::Status(fs::MakeReal(oldPath).ToString()).IsDirectory();
+    if (isDirectory)
+    {
+      e = PP::DirAllowed<PP::Makedir>(client.User(), newPath);
+    }
+    else
+    {
+      e = PP::FileAllowed<PP::Upload>(client.User(), newPath);
+    }
+    
+    if (!e)
+    {
+      control.Reply(ftp::ActionNotOkay, argStr + ": " + e.Message());
+      throw cmd::NoPostScriptError();
+    }
+    
+    e = fs::Rename(fs::MakeReal(oldPath), fs::MakeReal(newPath));    
+    if (!e)
+    {
+      control.Reply(ftp::ActionNotOkay, fromArgStr + " -> " + argStr + ": " + e.Message());
+      throw cmd::NoPostScriptError();
+    }
+
+    if (isDirectory)
+    {
+      // this should be changed to a single move action so as to retain the
+      // creation date in the database
+      if (cfg::Get().IsIndexed(oldPath.ToString()))
+      {
+        db::index::Delete(oldPath.ToString());
+      }
+
+      if (cfg::Get().IsIndexed(newPath.ToString()))
+      {
+        auto section = cfg::Get().SectionMatch(newPath.ToString(), true);
+        db::index::Add(newPath.ToString(), section ? section->Name() : "");
+      }
+    }
+    
+    control.Reply(ftp::FileActionOkay, "RNTO command successful.");
+  }
+  catch (const util::SystemError& e)
+  {
+    control.Reply(ftp::ActionNotOkay, fromArgStr + ": " + e.Message());
+    throw cmd::NoPostScriptError();
+  }
 }
 
 
@@ -874,8 +850,7 @@ void SIZECommand::Execute()
       
     util::path::Status status(fs::MakeReal(path).ToString());
     if (status.IsRegularFile())
-      control.Reply(ftp::FileStatus, 
-        boost::lexical_cast<std::string>(status.Size())); 
+      control.Reply(ftp::FileStatus, std::to_string(status.Size())); 
     else
       control.Reply(ftp::ActionNotOkay, argStr + ": Not a plain file.");
   }
@@ -908,56 +883,6 @@ void SSCNCommand::Execute()
   else os << "CLIENT METHOD";
   control.Reply(ftp::CommandOkay, os.str());  
 }
-
-
-
-void STATCommand::Execute()
-{
-  if (args.size() == 1)
-  {
-    std::ostringstream os;
-    os << programFullname << " status\n";
-    os << "< Insert status info here >\n";
-    os << "End of status.";
-    control.Reply(ftp::SystemStatus, os.str());
-    return;
-  }
-  
-  bool singleLineReplies = control.SingleLineReplies();
-  control.SetSingleLineReplies(false);
-  
-  auto singleLineGuard = util::MakeScopeExit([&]{ control.SetSingleLineReplies(singleLineReplies); });  
-
-  std::string options;
-  std::string::size_type optOffset = 0;
-  if (args[1][0] == '-')
-  {
-    options = args[1].substr(1);
-    optOffset += args[1].length();
-  }
-  
-  fs::Path path(util::TrimCopy(std::string(argStr, optOffset)));
-  
-  const cfg::Config& config = cfg::Get();
-  std::string forcedOptions = "l" + config.Lslong().Options();
-    
-  control.PartReply(ftp::DirectoryStatus, "Status of " + fs::MakePretty(MakeVirtual(path)).ToString() + ":");
-  DirectoryList dirList(client, control, path, ListOptions(options, forcedOptions),
-                        config.Lslong().MaxRecursion());
-  
-  boost::posix_time::ptime start = boost::posix_time::microsec_clock::local_time();
-  dirList.Execute();
-  boost::posix_time::ptime end = boost::posix_time::microsec_clock::local_time();
-  
-  control.Reply(ftp::DirectoryStatus, "End of status (" + 
-      stats::HighResSecondsString(start, end) + ")"); 
-  return;
-  
-  (void) singleLineReplies;
-  (void) singleLineGuard;
-}
-
-
 
 void STOUCommand::Execute()
 {

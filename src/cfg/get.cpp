@@ -1,3 +1,18 @@
+//    Copyright (C) 2012, 2013 ebftpd team
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 #include <cassert>
 #include <boost/thread/tss.hpp>
 #include <mutex>
@@ -61,17 +76,8 @@ void StopStartCheck()
   if (shared->TlsCertificate() != old.TlsCertificate()) settings.push_back("tls_certificate");
   if (shared->TlsCiphers() != old.TlsCiphers()) settings.push_back("tls_ciphers");
   
-  if (shared->Database().Address() != old.Database().Address() ||   
-      shared->Database().Port() != old.Database().Port())
-  {
-    settings.push_back("database");
-  }
-
-  if (shared->MaxUsers().Users() != old.MaxUsers().Users() ||
-      shared->MaxUsers().ExemptUsers() != old.MaxUsers().ExemptUsers())
-  {
-    settings.push_back("max_users");
-  }
+  if (shared->Database() != old.Database()) settings.push_back("db_*");
+  if (shared->MaxUsers() != old.MaxUsers()) settings.push_back("max_users");
   
   if (!settings.empty())
   {
