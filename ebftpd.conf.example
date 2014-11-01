@@ -12,7 +12,7 @@ download        *       *
 deleteown       *       *
 renameown       *       *
 
--epsv           *
+#-epsv           *
 -idle           *
 -vers           *
 -xdupe          *
@@ -25,17 +25,17 @@ renameown       *       *
 -adduser        *
 -tadduser       *
 -addip          *
--addownip       *
+#-addownip       *
 -flags          *
 -flagsown       *
 -delip          *
--delownip       *
+#-delownip       *
 -setpgrp        *
 -change         *
--changeallot    *
+#-changeallot    *
 -changeflags    *
--changeratio    *
--changesratio   *
+#-changeratio    *
+#-changesratio   *
 -changehomedir  *
 -kick           *
 -seen           *
@@ -50,16 +50,16 @@ renameown       *       *
 -tagline        *
 -chgrp          *
 -ranks          *
--grpranks       *
+#-grpranks       *
 -nuke           *
 -unnuke         *
 -nukes          *
 -unnukes        *
--undupe         *
--predupe        *
+#-undupe         *
+#-predupe        *
 -update         *
 -dupe           *
--fdupe          *
+#-fdupe          *
 -new            *
 -chown          *
 -chmod          *
@@ -75,8 +75,8 @@ renameown       *       *
 -dblog          *
 -siteoplog      *
 -laston         *
--onel           *
--oneladd        *
+#-onel           *
+#-oneladd        *
 -chgadmin       *
 -gadduser       *
 -groups         *
@@ -85,7 +85,7 @@ renameown       *       *
 -grpadd         *
 -grpdel         *
 -grpren         *
--grpnfo         *
+#-grpnfo         *
 -help           *
 -stat           *
 -time           *
@@ -96,9 +96,9 @@ renameown       *       *
 -msg*           *
 -msg=           *
 -msg{           *
--request        *
--reqfilled      *
--requests       *
+#-request        *
+#-reqfilled      *
+#-requests       *
 -reload         *
 -shutdownfull   *
 -shutdownsiteop *
