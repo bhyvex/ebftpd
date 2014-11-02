@@ -199,7 +199,7 @@ void TLSClientContext::CreateContext()
 {
   context = SSL_CTX_new(SSLv23_client_method());
   if (!context) throw TLSProtocolError();
-  SSL_CTX_set_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_ALL | SSL_OP_NO_TICKET);
+  SSL_CTX_set_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TICKET);
 }
 
 void TLSClientContext::Initialise(const std::string& certificate,
