@@ -46,7 +46,7 @@ required:         no
 default:          internal openssl defaults 
 description:      openssl compatible string to describe cipher to make available to clients
                   see http://www.openssl.org/docs/apps/ciphers.html#CIPHER_STRINGS for more details
-------------------------------------k------------------------------------------------------------------------------------                  
+------------------------------------------------------------------------------------------------------------------------                  
 usage:            datapath <path>
 required:         yes
 default:          none (suggested /ebftpd/data)
