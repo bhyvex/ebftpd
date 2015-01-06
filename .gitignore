@@ -28,8 +28,17 @@ glftpd.conf
 unity.cpp
 siteroot
 unity-*.cpp
+
+# Compiled binaries
+
 ebftpd
 ebftpd.exe
+chown
+index
+nuke
+passchk
+ranks
+who
 
 # Compiled Object files
 *.slo

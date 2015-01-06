@@ -194,11 +194,12 @@ inline void DumpBacktrace(const char* type, const char* message)
   IntegerToASCII(std::time(NULL), time, sizeof(time));
   
   char dumpPath[PATH_MAX] = { 0 };
-  strncat(dumpPath, logPath.c_str(), sizeof(dumpPath));
-  strncat(dumpPath, "/crash.", sizeof(dumpPath));
-  strncat(dumpPath, pid, sizeof(dumpPath));
-  strncat(dumpPath, ".", sizeof(dumpPath));
-  strncat(dumpPath, time, sizeof(dumpPath));
+  
+  strncat(dumpPath, logPath.c_str(), sizeof(dumpPath) - strlen(dumpPath) - 1);
+  strncat(dumpPath, "/crash.", sizeof(dumpPath) - strlen(dumpPath) - 1);
+  strncat(dumpPath, pid, sizeof(dumpPath) - strlen(dumpPath) - 1);
+  strncat(dumpPath, ".", sizeof(dumpPath) - strlen(dumpPath) - 1);
+  strncat(dumpPath, time, sizeof(dumpPath) - strlen(dumpPath) - 1);
   
   int dfd = open(dumpPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   int efd = STDERR_FILENO;

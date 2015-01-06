@@ -18,7 +18,7 @@
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/interprocess/segment_manager.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
-#include <boost/interprocess/containers/map.hpp>
+// #include <boost/interprocess/containers/map.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -55,7 +55,8 @@ struct OnlineClient
   char workDir[PATH_MAX];
   char ident[maximumIdentLength];
   char ip[INET6_ADDRSTRLEN];
-#if defined(__FreeBSD__)
+  
+#if defined(MAXHOSTNAMELEN)
   char hostname[MAXHOSTNAMELEN];
 #else
   char hostname[HOST_NAME_MAX];

@@ -16,6 +16,7 @@
 #include <boost/iostreams/stream.hpp>
 #include <boost/iostreams/device/file_descriptor.hpp>
 #include <cassert>
+#include <iostream>
 #include <unistd.h>
 #include <csignal>
 #include <fstream>

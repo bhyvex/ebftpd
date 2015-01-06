@@ -31,7 +31,13 @@ const char* gidAttributeName = "user.ebftpd.gid";
 int32_t GetAttribute(const std::string& path, const char* attribute)
 {
   char buf[11];
+  
+#if defined(__APPLE__)
+  int len = getxattr(path.c_str(), attribute, buf, sizeof(buf), 0, 0);
+#else
   int len = getxattr(path.c_str(), attribute, buf, sizeof(buf));
+#endif
+
   if (len < 0)
   {
     if (errno != ENOATTR && errno != ENODATA && errno != ENOENT)
@@ -57,7 +63,12 @@ util::Error SetAttribute(const std::string& path, const char* attribute, int32_t
 {
   char buf[11];
   int len = snprintf(buf, sizeof(buf), "%i", id);
+  
+#if defined(__APPLE__)
+  if (setxattr(path.c_str(), attribute, buf, len, 0, 0) < 0)
+#else
   if (setxattr(path.c_str(), attribute, buf, len, 0) < 0)
+#endif
   {
     auto e = util::Error::Failure(errno);
     logs::Error("Error while setting filesystem ownership attribute %1%: %2%: %3%", 

@@ -14,15 +14,20 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstring>
+
 #include <cassert>
+
 #include <boost/filesystem.hpp>
 #include "util/path/diriterator.hpp"
+
 #include "util/error.hpp"
 
+
 namespace util { namespace path
+
 {
 
-namespace fs = boost::filesystem3;
+namespace fs = boost::filesystem;
 
 DirIterator::DirIterator() :
   iter(new fs::directory_iterator())
@@ -140,4 +145,6 @@ const std::string* DirIterator::operator->() const
 }
   
 } /* path namespace */
+
 } /* util namespace */
+

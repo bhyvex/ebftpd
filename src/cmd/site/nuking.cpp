@@ -51,7 +51,13 @@ const char* nukeIdAttributeName = "user.ebftpd.nukeid";
 std::string GetNukeID(const fs::RealPath& path)
 { 
   char buf[25];
+
+#if defined(__APPLE__)
+  int len = getxattr(path.CString(), nukeIdAttributeName, buf, sizeof(buf), 0, 0);
+#else
   int len = getxattr(path.CString(), nukeIdAttributeName, buf, sizeof(buf));
+#endif
+
   if (len < 0)
   {
     if (errno != ENODATA && errno != ENOATTR && errno != ENOENT)
@@ -68,7 +74,11 @@ std::string GetNukeID(const fs::RealPath& path)
 
 void SetNukeID(const fs::RealPath& path, const std::string& id)
 {
+#if defined(__APPLE__)
+  if (setxattr(path.CString(), nukeIdAttributeName, id.c_str(), id.length(), 0, 0) < 0)
+#else
   if (setxattr(path.CString(), nukeIdAttributeName, id.c_str(), id.length(), 0) < 0)
+#endif
   {
     logs::Error("Error while writing filesystem attribute %1%: %2%: %3%", 
                 nukeIdAttributeName, path, util::Error::Failure(errno).Message());
@@ -77,7 +87,12 @@ void SetNukeID(const fs::RealPath& path, const std::string& id)
 
 void RemoveNukeID(const fs::RealPath& path)
 {
+
+#if defined(__APPLE__)
+  if (removexattr(path.CString(), nukeIdAttributeName, 0) > 0 &&
+#else
   if (removexattr(path.CString(), nukeIdAttributeName) > 0 &&
+#endif
       errno != ENOENT && errno != ENODATA && errno != ENOATTR)
   {
     logs::Error("Error while removing filesystem attribute %1%: %2%: %3%", 

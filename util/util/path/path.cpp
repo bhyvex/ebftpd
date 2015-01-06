@@ -18,6 +18,7 @@
 #include <fnmatch.h>
 #include <stdexcept>
 #include <unistd.h>
+#include <stdlib.h>
 #include "util/string.hpp"
 #include "util/path/path.hpp"
 

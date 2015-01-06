@@ -28,9 +28,12 @@ void SetProcessTitle(const std::string& title)
 {
 #if defined(__linux__)
   prctl(PR_SET_NAME, title.c_str(), 0, 0, 0);
-#else
+#elif defined(setproctitle)
   setproctitle(title.c_str());
 #endif
+
+  // NOTE: setproctitle does not exist on OSX. the standard way to achieve the same functionality
+  //       is to manually set argv[0]
 }
 
 std::string EscapeURI(const std::string& uri)

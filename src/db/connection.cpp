@@ -74,7 +74,7 @@ void Connection::Create()
     {
       std::string errmsg;
       auto connStr = mongo::ConnectionString::parse(cfg::Get().Database().URL(), errmsg);
-      scopedConn.reset(mongo::ScopedDbConnection::getScopedDbConnection(connStr));
+      scopedConn.reset(new mongo::ScopedDbConnection(connStr));
       (void) errmsg;
     }
     catch (const mongo::DBException& e)
@@ -97,8 +97,11 @@ void Connection::Create()
 
 void Connection::InitialiseMongo()
 {
+    /* TODO ...
   FILE* nullLog = fopen("/dev/null", "w");
   if (nullLog != nullptr) mongo::Logstream::setLogFile(nullLog);
+    */
+    
   mongo::pool.addHook(new AuthenticateHook());
 }
 
