@@ -463,7 +463,7 @@ Log::Log(const std::string& name, const std::vector<std::string>& toks) :
   name(name),
   console(YesNoToBoolean(toks[0])),
   file(YesNoToBoolean(toks[1])),
-  database(toks.size() >= 3 && util::StrToLong(toks[2]))
+  database(toks.size() >= 3 ? util::StrToLong(toks[2]) : 0)
 {
   if (database < 0) throw std::bad_cast();
 }
