@@ -3,11 +3,6 @@ project("ebftpd")
 include("../cmake/Defaults.cmake")
 include_directories(. ../util)
 
-# Configure OpenSSL library
-find_package (OpenSSL REQUIRED)
-link_directories (${OpenSSL_LIBRARY_DIRS})
-include_directories (${OpenSSL_INCLUDE_DIRS})
-
 add_executable(ebftpd main.cpp)
 add_dependencies(ebftpd version util eb)
 target_link_libraries(

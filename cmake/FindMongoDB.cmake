@@ -11,6 +11,8 @@ if(MongoDB_INCLUDE_DIR AND MongoDB_LIBRARIES)
 else(MongoDB_INCLUDE_DIR AND MongoDB_LIBRARIES)
 
   find_path(MongoDB_INCLUDE_DIR mongo/client/dbclient.h
+      ../deps/mongo-cxx-driver-build/include
+      deps/mongo-cxx-driver-build/include
       /usr/include/
       /usr/local/include/
       /usr/include/mongo/
@@ -29,6 +31,8 @@ if(WIN32)
 else(WIN32)
   find_library(MongoDB_LIBRARIES NAMES mongoclient
       PATHS
+      ../deps/mongo-cxx-driver-build/lib
+      deps/mongo-cxx-driver-build/lib
       /usr/lib
       /usr/lib/mongo
       /usr/local/lib

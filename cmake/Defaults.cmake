@@ -14,8 +14,7 @@ set(CMAKE_INSTALL_RPATH "\$ORIGIN/lib:\$ORIGIN/:\$ORIGIN/../lib")
 
 # Configure OpenSSL library
 find_package (OpenSSL REQUIRED)
-link_directories (${OpenSSL_LIBRARY_DIRS})
-include_directories (${OpenSSL_INCLUDE_DIRS})
+include_directories (${OpenSSL_INCLUDE_DIR})
 
 # Configure BOOST libraries
 if (NOT Boost_LIBRARY_DIRS)
@@ -29,20 +28,19 @@ if (NOT Boost_LIBRARY_DIRS)
   set (Boost_LIBRARIES ${Boost_LIBRARIES} CACHE STRING "Boost library list")
 endif()
 
-link_directories (${Boost_LIBRARY_DIRS})
 include_directories (${Boost_INCLUDE_DIRS})
 
 # Configure MongoDB client library
 find_package (MongoDB REQUIRED)
-include_directories (${MongoDB_INCLUDE_DIRS})
+include_directories (${MongoDB_INCLUDE_DIR})
 
 # Check for pthreads
 find_package (Pthread REQUIRED)
-include_directories (${Pthread_INCLUDE_DIRS})
+include_directories (${Pthread_INCLUDE_DIR})
 
 # Some OSes seem to use external libexecinfo
 find_package (Execinfo REQUIRED)
-include_directories(${Execinfo_INCLUDE_DIRS})
+include_directories(${Execinfo_INCLUDE_DIR})
 
 if(NOT TARGET version)
 	add_custom_target(version 
